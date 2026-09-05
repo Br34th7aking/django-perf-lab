@@ -1,0 +1,11 @@
+.git/
+.gitignore
+__pycache__/
+*.pyc
+.venv/
+.env
+pgdata/
+README.md
+PLAN.md
+locustfiles/
+.github/

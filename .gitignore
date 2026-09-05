@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+.venv/
+config/settings/local.py
+.env
+db.sqlite3
