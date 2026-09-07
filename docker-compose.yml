@@ -10,6 +10,7 @@ services:
       - POSTGRES_DB=perflab
       - POSTGRES_USER=perflab
       - POSTGRES_PASSWORD=perflab
+      - DJANGO_SETTINGS_MODULE=config.settings.local
       - REDIS_URL=redis://redis:6379/0
     depends_on:
       db:
