@@ -5,3 +5,4 @@ python_files = ["test_*.py", "tests.py"]
 
 [tool.ruff]
 line-length = 100
+extend-exclude = ["*/migrations/*"]
