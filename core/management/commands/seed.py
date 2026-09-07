@@ -4,15 +4,9 @@ import time
 from django.core.management.base import BaseCommand
 from django.db import connection
 
-
 from core.models import Author, Category, Comment, Post, Tag
 
-WORDS = (
-    "lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod "
-    "tempor incididunt ut labore et dolore magna aliqua enim ad minim veniam "
-    "quis nostrud exercitation ullamco laboris nisi aliquip ex ea commodo "
-    "consequat duis aute irure in reprehenderit voluptate velit esse cillum"
-).split()
+WORDS = ["lorem", "ipsum", "dolor", "sit", "amet", "consectetur", "adipiscing", "elit", "sed", "do", "eiusmod", "tempor", "incididunt", "ut", "labore", "et", "dolore", "magna", "aliqua", "enim", "ad", "minim", "veniam", "quis", "nostrud", "exercitation", "ullamco", "laboris", "nisi", "aliquip", "ex", "ea", "commodo", "consequat", "duis", "aute", "irure", "in", "reprehenderit", "voluptate", "velit", "esse", "cillum"]
 
 
 N_AUTHORS = 1000
