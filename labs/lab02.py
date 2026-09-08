@@ -3,7 +3,7 @@ from rest_framework.generics import ListAPIView
 
 from core.models import Post
 
-WEEK = dict(gte="2026-06-01", lt="2026-06-08")
+WEEK = {"gte": "2026-06-01", "lt": "2026-06-08"}
 
 
 class PostDateSerializer(serializers.ModelSerializer):
