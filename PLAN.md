@@ -75,7 +75,7 @@ Compose stack up (web/db/redis) · settings package · models + seed · DRF + si
 
 ## Arc A — Query reduction
 
-- [ ] **Lab 1 · N+1** — post list serializing author + category: watch ~2N+1 queries in silk → `select_related`; tags → `prefetch_related`. Also demo the trap: `.filter()` on a prefetched relation fires a new query (fix: filter in Python or `Prefetch`). **Prove:** 41+ queries → ~3.
+- [x] **Lab 1 · N+1** — post list serializing author + category: watch ~2N+1 queries in silk → `select_related`; tags → `prefetch_related`. Also demo the trap: `.filter()` on a prefetched relation fires a new query (fix: filter in Python or `Prefetch`). **Prove:** 41+ queries → ~3. *(Done: 61→2 queries; trap 22→2; pinned by tests.)*
 - [ ] **Lab 2 · Indexing** — filter posts on an unindexed column @100k rows. `EXPLAIN` shows Seq Scan → `db_index=True` + migration → Index Scan. Note the caveats: verify the planner uses it; indexes cost every write; the classic miss is forgetting the migration. **Prove:** query-time drop, EXPLAIN before/after in README.
 - [ ] **Lab 3 · Counts** — `count() > 0` vs `exists()`; pagination with vs without total count; approximate count via `pg_class.reltuples`. **Prove:** timing table for all three.
 - [ ] **Lab 4 · Payload trimming** — full model fetch vs `defer('body')` / `only()` vs `values()` / `values_list()` on the 2 KB-body posts. **Prove:** time + memory difference; note values/values_list skip model init entirely.
@@ -129,10 +129,11 @@ A real DRF + React app where the techniques appear in context instead of isolati
 
 ## STATE  *(update after every sitting)*
 
-- **Last updated:** 2026-09-07
-- **Where we are:** Lab 0 / M0 complete. Stack up (healthchecked compose), settings package, models (TimestampedModel abstract base + uuid public id), seed done — note: **500k comments** (user upped it from 300k), 100k posts. Silk live at /silk/, /labs/health/ responds, CI green, locust smoke-tested, README skeleton pushed.
-- **Next action:** Lab 1 — N+1. Build /labs/01/bad/ (post list serializing author + category, watch ~2N+1 queries in silk), then /labs/01/good/ with select_related/prefetch_related + the filter-on-prefetched trap demo.
+- **Last updated:** 2026-09-08
+- **Where we are:** Lab 1 complete on branch `lab-01`, PR open (merge = user's call). 61→2 queries on the list endpoint, trap demo 22→2, four query-count tests pin the results. Settings cleanup landed mid-lab: dedicated `config/settings/test.py`, DJANGO_SETTINGS_MODULE removed from compose + CI env (code setdefault + pytest ini are now the only voices). Ruff: RUF012 ignored (Django Meta idiom). **Workflow: each lab on its own `lab-NN` branch → PR → CI green → merge.**
+- **Next action:** After PR merges: Lab 2 — indexing. Filter posts on an unindexed column @100k rows, EXPLAIN Seq Scan → db_index → Index Scan.
 - **Session log:**
   - 2026-09-04 — plan created.
   - 2026-09-05 — scaffold: compose stack (healthchecks, .dockerignore), django project, settings package, postgres wired. Docker Desktop port-forward glitch fixed by recreate.
   - 2026-09-07 — models (user refactored to abstract TimestampedModel; kept uuid column, int PK), seed (500k comments), DRF+silk, tests+CI green (ruff excludes migrations), locustfile, README skeleton. **M0 done.**
+  - 2026-09-08 — Lab 1 built + measured. Mid-lab detour: silk polluted test query counts because compose's DJANGO_SETTINGS_MODULE env var outranked pytest ini → root-cause fix (test.py settings, env var removed from compose/CI). Lesson recorded: one authoritative config voice per process, mind env-var scope. **Lab 1 done**, PR open.
