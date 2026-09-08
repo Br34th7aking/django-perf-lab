@@ -40,6 +40,8 @@ class Post(TimestampedModel):
     author = models.ForeignKey(Author, on_delete=models.CASCADE, related_name="posts")
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name="posts")
     tags = models.ManyToManyField(Tag, related_name="posts")
+    published_on = models.DateTimeField(null=True) # unindexed, bad
+    published_on_idx = models.DateTimeField(null=True, db_index=True) # indexed
 
     def __str__(self):
         return self.title[:80]

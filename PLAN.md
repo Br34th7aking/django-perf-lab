@@ -76,7 +76,7 @@ Compose stack up (web/db/redis) · settings package · models + seed · DRF + si
 ## Arc A — Query reduction
 
 - [x] **Lab 1 · N+1** — post list serializing author + category: watch ~2N+1 queries in silk → `select_related`; tags → `prefetch_related`. Also demo the trap: `.filter()` on a prefetched relation fires a new query (fix: filter in Python or `Prefetch`). **Prove:** 41+ queries → ~3. *(Done: 61→2 queries; trap 22→2; pinned by tests.)*
-- [ ] **Lab 2 · Indexing** — filter posts on an unindexed column @100k rows. `EXPLAIN` shows Seq Scan → `db_index=True` + migration → Index Scan. Note the caveats: verify the planner uses it; indexes cost every write; the classic miss is forgetting the migration. **Prove:** query-time drop, EXPLAIN before/after in README.
+- [x] **Lab 2 · Indexing** — filter posts on an unindexed column @100k rows. `EXPLAIN` shows Seq Scan → `db_index=True` + migration → Index Scan. Note the caveats: verify the planner uses it; indexes cost every write; the classic miss is forgetting the migration. **Prove:** query-time drop, EXPLAIN before/after in README. *(Done: 28 ms → 0.18 ms; write tax +46%/20k inserts; index-only vs seq scan demo; index pinned by introspection test.)*
 - [ ] **Lab 3 · Counts** — `count() > 0` vs `exists()`; pagination with vs without total count; approximate count via `pg_class.reltuples`. **Prove:** timing table for all three.
 - [ ] **Lab 4 · Payload trimming** — full model fetch vs `defer('body')` / `only()` vs `values()` / `values_list()` on the 2 KB-body posts. **Prove:** time + memory difference; note values/values_list skip model init entirely.
 - [ ] **Lab 5 · Unbounded queries** — `.all()` list endpoint vs paginated, under locust. **Prove:** latency/throughput collapse vs stable.
@@ -130,10 +130,11 @@ A real DRF + React app where the techniques appear in context instead of isolati
 ## STATE  *(update after every sitting)*
 
 - **Last updated:** 2026-09-08
-- **Where we are:** Lab 1 complete on branch `lab-01`, PR open (merge = user's call). 61→2 queries on the list endpoint, trap demo 22→2, four query-count tests pin the results. Settings cleanup landed mid-lab: dedicated `config/settings/test.py`, DJANGO_SETTINGS_MODULE removed from compose + CI env (code setdefault + pytest ini are now the only voices). Ruff: RUF012 ignored (Django Meta idiom). **Workflow: each lab on its own `lab-NN` branch → PR → CI green → merge.**
-- **Next action:** After PR merges: Lab 2 — indexing. Filter posts on an unindexed column @100k rows, EXPLAIN Seq Scan → db_index → Index Scan.
+- **Where we are:** Lab 2 complete on branch `lab-02`, PR open (merge = user's call). Mirror-column design (`published_on` unindexed vs `published_on_idx` indexed) keeps both endpoints live: 28 ms Seq Scan → 0.18 ms Index Scan. Extras measured: Index Only Scan on count(*) (planner beats naive selectivity rule), Seq Scan flip on wide-window heap-touching aggregate, +46% insert tax from one index (DROP INDEX + ROLLBACK trick). Schema-introspection test guards the forgot-the-migration miss.
+- **Next action:** After PR merges: Lab 3 — counts. `count() > 0` vs `exists()`; pagination with/without total count; approximate count via `pg_class.reltuples`.
 - **Session log:**
   - 2026-09-04 — plan created.
   - 2026-09-05 — scaffold: compose stack (healthchecks, .dockerignore), django project, settings package, postgres wired. Docker Desktop port-forward glitch fixed by recreate.
   - 2026-09-07 — models (user refactored to abstract TimestampedModel; kept uuid column, int PK), seed (500k comments), DRF+silk, tests+CI green (ruff excludes migrations), locustfile, README skeleton. **M0 done.**
-  - 2026-09-08 — Lab 1 built + measured. Mid-lab detour: silk polluted test query counts because compose's DJANGO_SETTINGS_MODULE env var outranked pytest ini → root-cause fix (test.py settings, env var removed from compose/CI). Lesson recorded: one authoritative config voice per process, mind env-var scope. **Lab 1 done**, PR open.
+  - 2026-09-08 — Lab 1 built + measured. Mid-lab detour: silk polluted test query counts because compose's DJANGO_SETTINGS_MODULE env var outranked pytest ini → root-cause fix (test.py settings, env var removed from compose/CI). Lesson recorded: one authoritative config voice per process, mind env-var scope. **Lab 1 done**, PR merged.
+  - 2026-09-08 — Lab 2 built + measured (same sitting). Planner surprised us: predicted Seq Scan on wide count(*) but got Index Only Scan (visibility map) — corrected lesson: planner weighs heap pages touched, not rows matched. **Lab 2 done**, PR open.
