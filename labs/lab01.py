@@ -1,7 +1,6 @@
+from django.db.models import Prefetch
 from rest_framework import serializers
 from rest_framework.generics import ListAPIView
-
-from django.db.models import Prefetch
 
 from core.models import Post, Tag
 

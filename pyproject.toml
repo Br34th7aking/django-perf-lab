@@ -1,8 +1,9 @@
 [tool.pytest.ini_options]
-DJANGO_SETTINGS_MODULE = "config.settings.deploy"
+DJANGO_SETTINGS_MODULE = "config.settings.test"
 python_files = ["test_*.py", "tests.py"]
 
 
 [tool.ruff]
 line-length = 100
 extend-exclude = ["*/migrations/*"]
+ignore = ["RUF012"]
