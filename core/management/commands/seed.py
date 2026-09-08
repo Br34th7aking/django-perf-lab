@@ -100,6 +100,10 @@ class Command(BaseCommand):
                 f"UPDATE {Post._meta.db_table} "
                 "SET created_at = now() - random() * interval '365 days'"
             )
+            cur.execute(
+                f"UPDATE {Post._meta.db_table} "
+                "SET published_on = created_at::date, published_on_idx = created_at::date"
+            )
         
         self.stdout.write(self.style.SUCCESS(f"done in {time.monotonic() - t0:.0f}s"))
 
