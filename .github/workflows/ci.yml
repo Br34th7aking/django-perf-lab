@@ -23,7 +23,6 @@ jobs:
           --health-timeout 3s
           --health-retries 10
     env:
-      DJANGO_SETTINGS_MODULE: config.settings.deploy
       POSTGRES_HOST: localhost
     steps:
       - uses: actions/checkout@v4

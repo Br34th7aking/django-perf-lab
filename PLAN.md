@@ -113,7 +113,7 @@ Compose stack up (web/db/redis) · settings package · models + seed · DRF + si
 
 ## Milestones
 
-- [ ] **M0** — Lab 0 done: stack up, seeded, silk live, CI green
+- [x] **M0** — Lab 0 done: stack up, seeded, silk live, CI green
 - [ ] **M1** — Arc A done (labs 1–7): README "Query reduction" section, every lab with numbers
 - [ ] **M2** — Arc B done (labs 8–13)
 - [ ] **M3** — Arc C done (labs 14–16)
@@ -129,8 +129,10 @@ A real DRF + React app where the techniques appear in context instead of isolati
 
 ## STATE  *(update after every sitting)*
 
-- **Last updated:** 2026-09-04
-- **Where we are:** Plan written. Nothing built. Repo not yet git-initialized.
-- **Next action:** Lab 0 — scaffold. Start with git init + Dockerfile/compose (pattern user already knows), then settings package, then models + seed.
+- **Last updated:** 2026-09-07
+- **Where we are:** Lab 0 / M0 complete. Stack up (healthchecked compose), settings package, models (TimestampedModel abstract base + uuid public id), seed done — note: **500k comments** (user upped it from 300k), 100k posts. Silk live at /silk/, /labs/health/ responds, CI green, locust smoke-tested, README skeleton pushed.
+- **Next action:** Lab 1 — N+1. Build /labs/01/bad/ (post list serializing author + category, watch ~2N+1 queries in silk), then /labs/01/good/ with select_related/prefetch_related + the filter-on-prefetched trap demo.
 - **Session log:**
   - 2026-09-04 — plan created.
+  - 2026-09-05 — scaffold: compose stack (healthchecks, .dockerignore), django project, settings package, postgres wired. Docker Desktop port-forward glitch fixed by recreate.
+  - 2026-09-07 — models (user refactored to abstract TimestampedModel; kept uuid column, int PK), seed (500k comments), DRF+silk, tests+CI green (ruff excludes migrations), locustfile, README skeleton. **M0 done.**
