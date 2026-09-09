@@ -45,3 +45,12 @@ class TitlesValues(APIView):
         return Response(measured(lambda: list(Post.objects.values_list("title", flat=True)[:N])))
         
 
+class DeferTrap(APIView):
+    """
+    defer('body'), then touch .body anyway - one hidden query per object.
+    """
+
+    def get(self, request):
+        posts  = Post.objects.defer("body")[:20]
+        excerpts = [p.body[:80] for p in posts]
+        return Response({"excerpts": excerpts})

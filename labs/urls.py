@@ -19,4 +19,5 @@ urlpatterns = [
     path("04/full/", lab04.TitlesFull.as_view()),
     path("04/only/", lab04.TitlesOnly.as_view()),
     path("04/values/", lab04.TitlesValues.as_view()),
+    path("04/defer-trap/", lab04.DeferTrap.as_view()),
 ]
