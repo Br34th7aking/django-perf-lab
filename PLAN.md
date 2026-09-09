@@ -77,7 +77,7 @@ Compose stack up (web/db/redis) · settings package · models + seed · DRF + si
 
 - [x] **Lab 1 · N+1** — post list serializing author + category: watch ~2N+1 queries in silk → `select_related`; tags → `prefetch_related`. Also demo the trap: `.filter()` on a prefetched relation fires a new query (fix: filter in Python or `Prefetch`). **Prove:** 41+ queries → ~3. *(Done: 61→2 queries; trap 22→2; pinned by tests.)*
 - [x] **Lab 2 · Indexing** — filter posts on an unindexed column @100k rows. `EXPLAIN` shows Seq Scan → `db_index=True` + migration → Index Scan. Note the caveats: verify the planner uses it; indexes cost every write; the classic miss is forgetting the migration. **Prove:** query-time drop, EXPLAIN before/after in README. *(Done: 28 ms → 0.18 ms; write tax +46%/20k inserts; index-only vs seq scan demo; index pinned by introspection test.)*
-- [ ] **Lab 3 · Counts** — `count() > 0` vs `exists()`; pagination with vs without total count; approximate count via `pg_class.reltuples`. **Prove:** timing table for all three.
+- [x] **Lab 3 · Counts** — `count() > 0` vs `exists()`; pagination with vs without total count; approximate count via `pg_class.reltuples`. **Prove:** timing table for all three. *(Done: exists 27→1 ms; pagination 2q/8ms→1q/2ms; approx count 22→8 ms with 0 queries; SQL-shape tests.)*
 - [ ] **Lab 4 · Payload trimming** — full model fetch vs `defer('body')` / `only()` vs `values()` / `values_list()` on the 2 KB-body posts. **Prove:** time + memory difference; note values/values_list skip model init entirely.
 - [ ] **Lab 5 · Unbounded queries** — `.all()` list endpoint vs paginated, under locust. **Prove:** latency/throughput collapse vs stable.
 - [ ] **Lab 6 · Memoization** — model method doing queries, called 5× per request → `@cached_property`. **Prove:** query count drops; explain why request-scoped cache can never go stale.
@@ -129,12 +129,13 @@ A real DRF + React app where the techniques appear in context instead of isolati
 
 ## STATE  *(update after every sitting)*
 
-- **Last updated:** 2026-09-08
-- **Where we are:** Lab 2 complete on branch `lab-02`, PR open (merge = user's call). Mirror-column design (`published_on` unindexed vs `published_on_idx` indexed) keeps both endpoints live: 28 ms Seq Scan → 0.18 ms Index Scan. Extras measured: Index Only Scan on count(*) (planner beats naive selectivity rule), Seq Scan flip on wide-window heap-touching aggregate, +46% insert tax from one index (DROP INDEX + ROLLBACK trick). Schema-introspection test guards the forgot-the-migration miss.
-- **Next action:** After PR merges: Lab 3 — counts. `count() > 0` vs `exists()`; pagination with/without total count; approximate count via `pg_class.reltuples`.
+- **Last updated:** 2026-09-09
+- **Where we are:** Lab 3 complete on branch `lab-03`, PR open (merge = user's call). Three count sins measured: `count()>0` vs `exists()` (27→1 ms), paginator's hidden COUNT(*) (stubbed-count paginator drops it, 2q/8ms→1q/2ms), `pg_class.reltuples` estimate (0 queries). Bonus incident: lab-02's write-cost experiment rows leaked (user's psql ROLLBACKs didn't take) — caught by count-exact showing 140k, fixed by idempotent reseed; staleness lesson written into README with Google/GitHub examples.
+- **Next action:** After PR merges: Lab 4 — payload trimming. Full model fetch vs `defer('body')`/`only()` vs `values()`/`values_list()` on the 2 KB-body posts.
 - **Session log:**
   - 2026-09-04 — plan created.
   - 2026-09-05 — scaffold: compose stack (healthchecks, .dockerignore), django project, settings package, postgres wired. Docker Desktop port-forward glitch fixed by recreate.
   - 2026-09-07 — models (user refactored to abstract TimestampedModel; kept uuid column, int PK), seed (500k comments), DRF+silk, tests+CI green (ruff excludes migrations), locustfile, README skeleton. **M0 done.**
   - 2026-09-08 — Lab 1 built + measured. Mid-lab detour: silk polluted test query counts because compose's DJANGO_SETTINGS_MODULE env var outranked pytest ini → root-cause fix (test.py settings, env var removed from compose/CI). Lesson recorded: one authoritative config voice per process, mind env-var scope. **Lab 1 done**, PR merged.
-  - 2026-09-08 — Lab 2 built + measured (same sitting). Planner surprised us: predicted Seq Scan on wide count(*) but got Index Only Scan (visibility map) — corrected lesson: planner weighs heap pages touched, not rows matched. **Lab 2 done**, PR open.
+  - 2026-09-08 — Lab 2 built + measured (same sitting). Planner surprised us: predicted Seq Scan on wide count(*) but got Index Only Scan (visibility map) — corrected lesson: planner weighs heap pages touched, not rows matched. **Lab 2 done**, PR merged.
+  - 2026-09-09 — Lab 3 built + measured. Leaked-rows incident (140k posts) traced to uncommitted-rollback assumption in lab-02's psql experiment; reseeded. Set-vs-dict typo in Response caught by test+ruff pointing at same line. **Lab 3 done**, PR open.
