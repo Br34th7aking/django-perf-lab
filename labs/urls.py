@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import lab01, lab02, lab03, lab04, lab05, views
+from . import lab01, lab02, lab03, lab04, lab05, lab06, views
 
 urlpatterns = [
     path("health/", views.Health.as_view()),
@@ -22,4 +22,6 @@ urlpatterns = [
     path("04/defer-trap/", lab04.DeferTrap.as_view()),
     path("05/bad/", lab05.AllPosts.as_view()),
     path("05/good/", lab05.PagedPosts.as_view()),
+    path("06/bad/<int:pk>/", lab06.PostDetailBad.as_view()),
+    path("06/good/<int:pk>/", lab06.PostDetailGood.as_view()),
 ]
