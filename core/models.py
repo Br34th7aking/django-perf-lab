@@ -46,6 +46,14 @@ class Post(TimestampedModel):
     def __str__(self):
         return self.title[:80]
 
+    def comment_stats(self):
+        """Two queries every single cell"""
+        latest = self.comments.order_by("-created_at").first()
+        return {
+            "count": self.comments.count(),
+            "latest": latest.body[:50] if latest else None,
+        }
+
 
 class Comment(TimestampedModel):
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name="comments")
