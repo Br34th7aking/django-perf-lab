@@ -19,6 +19,7 @@ Every lab keeps both endpoints live: `/labs/NN/bad/` and `/labs/NN/good/`.
 | [01](#lab-01--n1-queries) | N+1 queries | 61 queries / 59 ms | 2 queries / 34 ms | `select_related` + `prefetch_related` |
 | [02](#lab-02--indexing) | Seq scan on unindexed filter | 28 ms | 0.18 ms | `db_index=True` + migration |
 | [03](#lab-03--counts) | Paying for counts nobody needs | 27 ms | ~1 ms | `exists()` / skip or estimate the count |
+| [04](#lab-04--payload-trimming) | Fetching 2 KB bodies to show titles | 333 ms / 14.7 MB | 9 ms / 0.7 MB | `only()` / `values_list()` |
 
 ### Lab 01 — N+1 queries
 
@@ -126,3 +127,29 @@ zero staleness; a results header tolerates almost anything.
 `labs/test_lab03.py` pins the SQL shape: the good existence check must
 contain `LIMIT 1` and no `COUNT`; no-count pagination must run exactly one
 query.
+
+### Lab 04 — Payload trimming
+
+Collecting 5,000 post titles, three ways. Endpoints self-measure with
+`tracemalloc` + `perf_counter` (absolute times inflated by tracing; the
+comparison is fair):
+
+| Endpoint | Fetches | Time | Peak memory |
+|----------|---------|------|-------------|
+| `/labs/04/full/` | whole rows, model objects | 333 ms | 14.65 MB |
+| `/labs/04/only/` | 2 columns, model objects | 66 ms | 2.18 MB |
+| `/labs/04/values/` | 1 column, plain tuples | 9 ms | 0.70 MB |
+
+The two gaps are two different costs. `full → only` is **data movement**:
+5,000 × ~2 KB bodies that stopped leaving postgres (−12.5 MB, −267 ms).
+`only → values` is **object construction**: 5,000 Django model `__init__`s
+skipped — each instance carries a `__dict__` and field state, and
+instantiation dominates the remaining time (−1.5 MB, −57 ms). Rule: pay for
+model objects only when you'll call their methods; for read-only projection,
+ship tuples.
+
+The trap (`/labs/04/defer-trap/`): `defer("body")` hands back objects with a
+hole in them — *touching* `.body` silently refetches it, one query per
+object (21 queries for 20 posts). N+1 with no relation in sight: `defer` is
+a bet you won't touch what you skipped. `labs/test_lab04.py` pins the column
+lists in the SQL and the trap's per-row cost.
