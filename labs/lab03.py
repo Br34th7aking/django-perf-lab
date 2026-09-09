@@ -1,4 +1,5 @@
 from django.core.paginator import Paginator
+from django.db import connection
 from rest_framework import serializers
 from rest_framework.generics import ListAPIView
 from rest_framework.pagination import PageNumberPagination
@@ -17,7 +18,7 @@ class HasCommentsBad(APIView):
 class HasCommentsGood(APIView):
     def get(self, request):
         has_comments = Comment.objects.exists()
-        return Response({"has_comments"})
+        return Response({"has_comments": has_comments})
 
 
 class PostTitleSerializer(serializers.ModelSerializer):
@@ -51,3 +52,20 @@ class PostsPageNoCount(ListAPIView):
     serializer_class = PostTitleSerializer
     pagination_class = NoCountPagination
     queryset = Post.objects.order_by("id")
+
+
+class PostCountExact(APIView):
+    def get(self, request):
+        return Response({"count": Post.objects.count(), "exact": True})
+
+
+class PostCountApprox(APIView):
+    def get(self, request):
+        with connection.cursor() as cur:
+            cur.execute(
+                "SELECT reltuples::bigint FROM pg_class WHERE relname = %s",
+                [Post._meta.db_table],
+            )
+            estimate = cur.fetchone()[0]
+        
+        return Response({"count": estimate, "exact": False})

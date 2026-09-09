@@ -18,6 +18,7 @@ Every lab keeps both endpoints live: `/labs/NN/bad/` and `/labs/NN/good/`.
 |-----|---------|--------|-------|-----|
 | [01](#lab-01--n1-queries) | N+1 queries | 61 queries / 59 ms | 2 queries / 34 ms | `select_related` + `prefetch_related` |
 | [02](#lab-02--indexing) | Seq scan on unindexed filter | 28 ms | 0.18 ms | `db_index=True` + migration |
+| [03](#lab-03--counts) | Paying for counts nobody needs | 27 ms | ~1 ms | `exists()` / skip or estimate the count |
 
 ### Lab 01 — N+1 queries
 
@@ -80,3 +81,48 @@ Three lessons beyond the 150× headline:
 |----------|--------|------|------|
 | `/labs/02/bad/` | `published_on` | Seq Scan + Sort | 28 ms |
 | `/labs/02/good/` | `published_on_idx` | Index Scan | 0.18 ms |
+
+### Lab 03 — Counts
+
+Counting is a full pass over matching rows. Three disguises of the same
+mistake — paying for exactness nobody asked for:
+
+1. **Existence:** `count() > 0` tallies all 500k comments to answer a yes/no
+   question; `exists()` compiles to `SELECT 1 ... LIMIT 1` and stops at the
+   first row. 27 ms → ~1 ms.
+2. **Pagination:** DRF's `PageNumberPagination` fires `SELECT COUNT(*)` on
+   every page request just to report the total. A paginator with a stubbed
+   count keeps next/previous navigation and drops the count query:
+   2 queries / 8 ms → 1 query / 2 ms. Trade-off: no real total — which most
+   infinite-scroll UIs never displayed anyway.
+3. **Dashboard totals:** `pg_class.reltuples` (the planner's own estimate,
+   maintained by autovacuum) answers "how many posts?" from the catalog —
+   no table access at all: 22 ms → 8 ms request time, zero ORM queries.
+   Trade-off: staleness between autovacuum passes, and per-table only (no
+   filtered estimates).
+
+The staleness trade-off demonstrated itself: mid-lab, the exact count said
+140,000 while the estimate said 104,946 — the estimate was "wrong" but the
+table had quietly gained 40k rows from a leaked experiment. Every count over
+a busy table is stale by the time it renders; the question is never "how do
+I count fast?" but "how stale a number can this screen tolerate?"
+
+Production systems answer that question visibly once you look: Google's
+"about 1,240,000 results", GitHub capping issue counts at "5,000+", admin
+dashboards showing "~2.3M users", view counters that update in lurches.
+Each is some flavor of the above — an estimate, a cached count refreshed on
+a schedule, or a denormalized counter (Lab 10's topic). An invoice tolerates
+zero staleness; a results header tolerates almost anything.
+
+| Endpoint | Queries | Time |
+|----------|---------|------|
+| `/labs/03/bad/` (`count() > 0`) | 1 (COUNT) | 27 ms in SQL |
+| `/labs/03/good/` (`exists()`) | 1 (LIMIT 1) | ~1 ms in SQL |
+| `/labs/03/page-counted/` | 2 | 8 ms |
+| `/labs/03/page-nocount/` | 1 | 2 ms |
+| `/labs/03/count-exact/` | 1 | 22 ms request |
+| `/labs/03/count-approx/` | 0 | 8 ms request |
+
+`labs/test_lab03.py` pins the SQL shape: the good existence check must
+contain `LIMIT 1` and no `COUNT`; no-count pagination must run exactly one
+query.
