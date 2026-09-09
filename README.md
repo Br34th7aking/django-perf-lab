@@ -20,6 +20,7 @@ Every lab keeps both endpoints live: `/labs/NN/bad/` and `/labs/NN/good/`.
 | [02](#lab-02--indexing) | Seq scan on unindexed filter | 28 ms | 0.18 ms | `db_index=True` + migration |
 | [03](#lab-03--counts) | Paying for counts nobody needs | 27 ms | ~1 ms | `exists()` / skip or estimate the count |
 | [04](#lab-04--payload-trimming) | Fetching 2 KB bodies to show titles | 333 ms / 14.7 MB | 9 ms / 0.7 MB | `only()` / `values_list()` |
+| [05](#lab-05--unbounded-queries) | List endpoint with no pagination | 22 s median @ 10 users | 29 ms median | paginate |
 
 ### Lab 01 — N+1 queries
 
@@ -153,3 +154,35 @@ hole in them — *touching* `.body` silently refetches it, one query per
 object (21 queries for 20 posts). N+1 with no relation in sight: `defer` is
 a bet you won't touch what you skipped. `labs/test_lab04.py` pins the column
 lists in the SQL and the trap's per-row cost.
+
+### Lab 05 — Unbounded queries
+
+A list endpoint without pagination returns the whole table. It works fine in
+development with 50 rows, then the table grows. At 100k posts, one request
+to `/labs/05/bad/` builds an 11 MB response in 2.3 seconds. The paginated
+version returns 2 KB in 15 ms.
+
+The single-request cost is not the real problem. The real problem shows up
+under load — 10 concurrent users for 60 seconds (locust, 1 gunicorn worker):
+
+| | `/labs/05/bad/` | `/labs/05/good/` |
+|---|---|---|
+| Requests completed | 25 | 374 |
+| Throughput | 0.43 req/s | 6.26 req/s |
+| Median latency | 22,000 ms | 29 ms |
+| Single-user latency | 2,300 ms | 15 ms |
+
+The worker serves one request at a time. When each takes 2.3 s, arriving
+requests wait in line, and the line grows faster than it drains: a 2.3 s
+endpoint becomes a 22 s endpoint at 10 users. The paginated endpoint's
+median under load (29 ms) is the same as its single-user cost — its latency
+does not depend on how many people are asking.
+
+That is the definition of stable vs collapsing: not how slow one request is,
+but whether latency is a function of load. A side effect worth noting: the
+first requests after the bad run also measured slow — the unbounded endpoint
+was still draining and blocked the worker for everyone. One unbounded
+endpoint degrades every endpoint that shares its worker.
+
+`labs/test_lab05.py` pins the contract: the bad response grows with the
+table, the good one stays at 20 rows regardless.
