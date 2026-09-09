@@ -21,6 +21,7 @@ Every lab keeps both endpoints live: `/labs/NN/bad/` and `/labs/NN/good/`.
 | [03](#lab-03--counts) | Paying for counts nobody needs | 27 ms | ~1 ms | `exists()` / skip or estimate the count |
 | [04](#lab-04--payload-trimming) | Fetching 2 KB bodies to show titles | 333 ms / 14.7 MB | 9 ms / 0.7 MB | `only()` / `values_list()` |
 | [05](#lab-05--unbounded-queries) | List endpoint with no pagination | 22 s median @ 10 users | 29 ms median | paginate |
+| [06](#lab-06--memoization) | Query method called 4× per request | 9 queries / 82 ms | 3 queries / 21 ms | `@cached_property` |
 
 ### Lab 01 — N+1 queries
 
@@ -186,3 +187,28 @@ endpoint degrades every endpoint that shares its worker.
 
 `labs/test_lab05.py` pins the contract: the bad response grows with the
 table, the good one stays at 20 rows regardless.
+
+### Lab 06 — Memoization
+
+`Post.comment_stats()` runs two queries. Four response fields each call it,
+because in real code the callers never see each other — one lives in a
+serializer field, another in a template fragment, another in a helper. Each
+call pays again: 1 + 4×2 = **9 queries / 82 ms** per request.
+
+`@cached_property` computes on first access and stores the result on the
+instance; every later access reads the stored value. Same four callers,
+**3 queries / 21 ms** — and the callers didn't change, only the decorator.
+
+This cache is safe because its lifetime equals the object's lifetime, and
+the `Post` instance lives for exactly one request. The next request builds
+a fresh instance with an empty cache, so it can never serve stale data
+across requests. Most caching bugs are invalidation bugs; here invalidation
+is garbage collection.
+
+| Endpoint | Queries | Time |
+|----------|---------|------|
+| `/labs/06/bad/<pk>/` | 9 | 82 ms |
+| `/labs/06/good/<pk>/` | 3 | 21 ms |
+
+`labs/test_lab06.py` pins both query counts and asserts the two endpoints
+return identical payloads — the optimization changed cost, not behavior.

@@ -23,4 +23,5 @@ urlpatterns = [
     path("05/bad/", lab05.AllPosts.as_view()),
     path("05/good/", lab05.PagedPosts.as_view()),
     path("06/bad/<int:pk>/", lab06.PostDetailBad.as_view()),
+    path("06/good/<int:pk>/", lab06.PostDetailGood.as_view()),
 ]

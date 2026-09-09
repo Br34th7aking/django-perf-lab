@@ -80,7 +80,7 @@ Compose stack up (web/db/redis) · settings package · models + seed · DRF + si
 - [x] **Lab 3 · Counts** — `count() > 0` vs `exists()`; pagination with vs without total count; approximate count via `pg_class.reltuples`. **Prove:** timing table for all three. *(Done: exists 27→1 ms; pagination 2q/8ms→1q/2ms; approx count 22→8 ms with 0 queries; SQL-shape tests.)*
 - [x] **Lab 4 · Payload trimming** — full model fetch vs `defer('body')` / `only()` vs `values()` / `values_list()` on the 2 KB-body posts. **Prove:** time + memory difference; note values/values_list skip model init entirely. *(Done: 333 ms/14.7 MB → 66 ms/2.2 MB → 9 ms/0.7 MB @5k titles; defer-touch trap = 21 queries; column lists pinned by tests.)*
 - [x] **Lab 5 · Unbounded queries** — `.all()` list endpoint vs paginated, under locust. **Prove:** latency/throughput collapse vs stable. *(Done: 2.3 s solo → 22 s median @10 users vs flat 29 ms; 0.43 vs 6.26 req/s; queueing mechanism written up.)*
-- [ ] **Lab 6 · Memoization** — model method doing queries, called 5× per request → `@cached_property`. **Prove:** query count drops; explain why request-scoped cache can never go stale.
+- [x] **Lab 6 · Memoization** — model method doing queries, called 5× per request → `@cached_property`. **Prove:** query count drops; explain why request-scoped cache can never go stale. *(Done: 9→3 queries, 82→21 ms; within-request mutation caveat documented; payload-equality test.)*
 - [ ] **Lab 7 · Generic FK cost** — add `Like` via contenttypes; list posts with like info vs a concrete-FK equivalent. **Prove:** the query explosion, measured.
 
 ## Arc B — Beyond the ORM
@@ -130,8 +130,8 @@ A real DRF + React app where the techniques appear in context instead of isolati
 ## STATE  *(update after every sitting)*
 
 - **Last updated:** 2026-09-09
-- **Where we are:** Lab 5 complete on branch `lab-05`, PR open (merge = user's call). First locust lab: unbounded .all() endpoint (11 MB, 2.3 s solo) collapses to 22 s median under 10 users on 1 sync worker; paginated stays at 29 ms. Queueing-is-the-mechanism lesson + cross-endpoint poisoning noted in README. Debug detour: stale gunicorn worker after urls.py referenced lab05 before the file existed (reloader doesn't watch never-imported modules) — fixed by restart.
-- **Next action:** After PR merges: Lab 6 — memoization. Model method doing queries called 5×/request → @cached_property; why request-scoped caches can never go stale.
+- **Where we are:** Lab 6 complete on branch `lab-06`, README/PLAN updated, PR pending user's README review. comment_stats() method (2 queries) called by 4 response fields → 9 queries/82 ms; @cached_property twin → 3 queries/21 ms. Safety argument (cache lifetime = instance lifetime = one request) + within-request mutation caveat in README.
+- **Next action:** PR for lab-06, then Lab 7 — generic FK cost: add Like via contenttypes, list posts with like info vs concrete-FK equivalent. Last lab of Arc A → M1.
 - **Session log:**
   - 2026-09-04 — plan created.
   - 2026-09-05 — scaffold: compose stack (healthchecks, .dockerignore), django project, settings package, postgres wired. Docker Desktop port-forward glitch fixed by recreate.
@@ -140,4 +140,5 @@ A real DRF + React app where the techniques appear in context instead of isolati
   - 2026-09-08 — Lab 2 built + measured (same sitting). Planner surprised us: predicted Seq Scan on wide count(*) but got Index Only Scan (visibility map) — corrected lesson: planner weighs heap pages touched, not rows matched. **Lab 2 done**, PR merged.
   - 2026-09-09 — Lab 3 built + measured. Leaked-rows incident (140k posts) traced to uncommitted-rollback assumption in lab-02's psql experiment; reseeded. Set-vs-dict typo in Response caught by test+ruff pointing at same line. **Lab 3 done**, PR merged.
   - 2026-09-09 — Lab 4 built + measured (same sitting). 37×/21× time/memory spread across full→only→values; user spotted values_list memory result before explanation. **Lab 4 done**, PR merged.
-  - 2026-09-09 — Lab 5 built + load-tested (same sitting). Both 500s traced to stale worker, not code; locust runs by Claude at user's request. **Lab 5 done**, PR open.
+  - 2026-09-09 — Lab 5 built + load-tested (same sitting). Both 500s traced to stale worker, not code; locust runs by Claude at user's request. **Lab 5 done**, PR merged.
+  - 2026-09-09 — Lab 6 built + measured (same sitting). 9→3 queries via cached_property; README emphasizes lifetime-based safety + mid-request write caveat. **Lab 6 done**, PR awaiting user's README review.

@@ -1,6 +1,7 @@
 import uuid
 
 from django.db import models
+from django.utils.functional import cached_property
 
 
 class TimestampedModel(models.Model):
@@ -48,6 +49,15 @@ class Post(TimestampedModel):
 
     def comment_stats(self):
         """Two queries every single cell"""
+        latest = self.comments.order_by("-created_at").first()
+        return {
+            "count": self.comments.count(),
+            "latest": latest.body[:50] if latest else None,
+        }
+    
+    @cached_property
+    def comment_stats_cached(self):
+        """Same two queries but fired only on first access each instance."""
         latest = self.comments.order_by("-created_at").first()
         return {
             "count": self.comments.count(),
