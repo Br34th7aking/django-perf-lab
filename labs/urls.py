@@ -12,4 +12,6 @@ urlpatterns = [
     path("02/good/", lab02.PostByDateGood.as_view()),
     path("03/bad/", lab03.HasCommentsBad.as_view()),
     path("03/good/", lab03.HasCommentsGood.as_view()),
+    path("03/page-counted/", lab03.PostsPageCounted.as_view()),
+    path("03/page-nocount/", lab03.PostsPageNoCount.as_view()),
 ]
