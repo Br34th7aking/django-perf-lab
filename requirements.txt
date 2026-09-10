@@ -3,3 +3,5 @@ djangorestframework
 psycopg[binary]
 gunicorn
 django-silk
+django-cachalot
+redis
