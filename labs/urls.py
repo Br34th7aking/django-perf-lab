@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import lab01, lab02, lab03, lab04, lab05, lab06, views
+from . import lab01, lab02, lab03, lab04, lab05, lab06, lab07, views
 
 urlpatterns = [
     path("health/", views.Health.as_view()),
@@ -24,4 +24,8 @@ urlpatterns = [
     path("05/good/", lab05.PagedPosts.as_view()),
     path("06/bad/<int:pk>/", lab06.PostDetailBad.as_view()),
     path("06/good/<int:pk>/", lab06.PostDetailGood.as_view()),
+    path("07/bad/", lab07.PostsGenericLikes.as_view()),
+    path("07/good/", lab07.PostsConcreteLikes.as_view()),
+    path("07/feed/", lab07.LikesFeed.as_view()),
+    path("07/feed-fixed/", lab07.LikesFeedFixed.as_view()),
 ]
