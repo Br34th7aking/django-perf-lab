@@ -81,7 +81,7 @@ Compose stack up (web/db/redis) · settings package · models + seed · DRF + si
 - [x] **Lab 4 · Payload trimming** — full model fetch vs `defer('body')` / `only()` vs `values()` / `values_list()` on the 2 KB-body posts. **Prove:** time + memory difference; note values/values_list skip model init entirely. *(Done: 333 ms/14.7 MB → 66 ms/2.2 MB → 9 ms/0.7 MB @5k titles; defer-touch trap = 21 queries; column lists pinned by tests.)*
 - [x] **Lab 5 · Unbounded queries** — `.all()` list endpoint vs paginated, under locust. **Prove:** latency/throughput collapse vs stable. *(Done: 2.3 s solo → 22 s median @10 users vs flat 29 ms; 0.43 vs 6.26 req/s; queueing mechanism written up.)*
 - [x] **Lab 6 · Memoization** — model method doing queries, called 5× per request → `@cached_property`. **Prove:** query count drops; explain why request-scoped cache can never go stale. *(Done: 9→3 queries, 82→21 ms; within-request mutation caveat documented; payload-equality test.)*
-- [ ] **Lab 7 · Generic FK cost** — add `Like` via contenttypes; list posts with like info vs a concrete-FK equivalent. **Prove:** the query explosion, measured.
+- [x] **Lab 7 · Generic FK cost** — add `Like` via contenttypes; list posts with like info vs a concrete-FK equivalent. **Prove:** the query explosion, measured. *(Done: aggregate 60→10 ms (seq-scan-all-likes vs indexed nested loop, EXPLAIN'd); feed 51→2 queries via GenericPrefetch; 200k mirrored likes in seed.)*
 
 ## Arc B — Beyond the ORM
 
@@ -130,8 +130,8 @@ A real DRF + React app where the techniques appear in context instead of isolati
 ## STATE  *(update after every sitting)*
 
 - **Last updated:** 2026-09-09
-- **Where we are:** Lab 6 complete on branch `lab-06`, README/PLAN updated, PR pending user's README review. comment_stats() method (2 queries) called by 4 response fields → 9 queries/82 ms; @cached_property twin → 3 queries/21 ms. Safety argument (cache lifetime = instance lifetime = one request) + within-request mutation caveat in README.
-- **Next action:** PR for lab-06, then Lab 7 — generic FK cost: add Like via contenttypes, list posts with like info vs concrete-FK equivalent. Last lab of Arc A → M1.
+- **Where we are:** Lab 7 complete on branch `lab-07`, README entry pending user review before PR. Like (GFK) + PostLike (concrete) mirrored at 200k rows in seed. Aggregate: generic join seq-scans all likes + on-disk sort (60 ms) vs concrete indexed nested loop touching only the page (10 ms). Feed: content_object lazy = 51 queries; prefetch = 1 per content type. **Lab 7 merges ⇒ Arc A complete ⇒ M1.**
+- **Next action:** PR for lab-07 after README approval → tick M1 → Lab 8 (Arc B opener): django-cachalot ORM query cache, install + on/off measurement + invalidation trap.
 - **Session log:**
   - 2026-09-04 — plan created.
   - 2026-09-05 — scaffold: compose stack (healthchecks, .dockerignore), django project, settings package, postgres wired. Docker Desktop port-forward glitch fixed by recreate.
@@ -141,4 +141,5 @@ A real DRF + React app where the techniques appear in context instead of isolati
   - 2026-09-09 — Lab 3 built + measured. Leaked-rows incident (140k posts) traced to uncommitted-rollback assumption in lab-02's psql experiment; reseeded. Set-vs-dict typo in Response caught by test+ruff pointing at same line. **Lab 3 done**, PR merged.
   - 2026-09-09 — Lab 4 built + measured (same sitting). 37×/21× time/memory spread across full→only→values; user spotted values_list memory result before explanation. **Lab 4 done**, PR merged.
   - 2026-09-09 — Lab 5 built + load-tested (same sitting). Both 500s traced to stale worker, not code; locust runs by Claude at user's request. **Lab 5 done**, PR merged.
-  - 2026-09-09 — Lab 6 built + measured (same sitting). 9→3 queries via cached_property; README emphasizes lifetime-based safety + mid-request write caveat. **Lab 6 done**, PR awaiting user's README review.
+  - 2026-09-09 — Lab 6 built + measured (same sitting). 9→3 queries via cached_property; README emphasizes lifetime-based safety + mid-request write caveat. User set README voice rule: human technical prose, no conversational framing; review entries before PR. **Lab 6 done**, PR merged.
+  - 2026-09-10 — Lab 7 built + measured. EXPLAIN contrast: generic hash-join-everything vs concrete nested-loop-the-page. **Lab 7 done**, awaiting README approval → PR → M1.

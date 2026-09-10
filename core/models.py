@@ -1,5 +1,7 @@
 import uuid
 
+from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
+from django.contrib.contenttypes.models import ContentType
 from django.db import models
 from django.utils.functional import cached_property
 
@@ -11,6 +13,12 @@ class TimestampedModel(models.Model):
 
     class Meta:
         abstract = True
+
+
+class Like(TimestampedModel):
+    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
+    object_id = models.PositiveIntegerField()
+    content_object = GenericForeignKey("content_type", "object_id")
 
 
 
@@ -43,6 +51,7 @@ class Post(TimestampedModel):
     tags = models.ManyToManyField(Tag, related_name="posts")
     published_on = models.DateTimeField(null=True) # unindexed, bad
     published_on_idx = models.DateTimeField(null=True, db_index=True) # indexed
+    generic_likes = GenericRelation(Like)
 
     def __str__(self):
         return self.title[:80]
@@ -71,3 +80,8 @@ class Comment(TimestampedModel):
 
     def __str__(self):
         return f"Comment on {self.post_id}"
+
+
+class PostLike(TimestampedModel):
+    """Concrete equivalent: can only like posts, and that's the point."""
+    post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name="likes")

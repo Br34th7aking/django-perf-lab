@@ -22,6 +22,7 @@ Every lab keeps both endpoints live: `/labs/NN/bad/` and `/labs/NN/good/`.
 | [04](#lab-04--payload-trimming) | Fetching 2 KB bodies to show titles | 333 ms / 14.7 MB | 9 ms / 0.7 MB | `only()` / `values_list()` |
 | [05](#lab-05--unbounded-queries) | List endpoint with no pagination | 22 s median @ 10 users | 29 ms median | paginate |
 | [06](#lab-06--memoization) | Query method called 4× per request | 9 queries / 82 ms | 3 queries / 21 ms | `@cached_property` |
+| [07](#lab-07--generic-foreign-keys) | GenericForeignKey where a concrete FK would do | 60 ms / 51 queries | 10 ms / 2 queries | concrete FK (or composite index + prefetch) |
 
 ### Lab 01 — N+1 queries
 
@@ -212,3 +213,44 @@ is garbage collection.
 
 `labs/test_lab06.py` pins both query counts and asserts the two endpoints
 return identical payloads — the optimization changed cost, not behavior.
+
+### Lab 07 — Generic foreign keys
+
+A `GenericForeignKey` stores its target as two loose columns —
+`content_type_id` (which table) and `object_id` (which row) — so one `Like`
+table can point at any model. The database no longer understands the
+relationship: no FK constraint, no automatic index on `object_id`, no single
+join target. Setup: 200k likes stored twice, as generic `Like` rows and as
+concrete `PostLike` rows with a plain FK, identical distribution.
+
+Counting likes for a 20-post page, one query each way:
+
+| Endpoint | Join strategy (EXPLAIN) | Time |
+|----------|------------------------|------|
+| `/labs/07/bad/` (generic) | Seq scan all 200k likes → hash join → on-disk sort | 60 ms |
+| `/labs/07/good/` (concrete) | Nested loop: index lookup per post, touches only the page's likes | 10 ms |
+
+The concrete query's cost scales with page size; the generic one scales with
+total likes ever recorded, because `object_id` has no index and the compound
+join condition rules out the simple plan. A composite index on
+`(content_type, object_id)` mitigates this, but concrete FKs ship the index
+by default.
+
+Resolving `like.content_object` has no join at all — row 1 may live in the
+posts table, row 2 in comments — so the ORM fetches lazily, one query per
+row: the 50-like feed runs 51 queries. `prefetch_related("content_object")`
+batches one fetch per distinct content type (2 queries here). The query
+count still scales with the number of types on the page, where a concrete
+FK is always a single JOIN.
+
+| Endpoint | Queries | Time |
+|----------|---------|------|
+| `/labs/07/feed/` | 51 | 36 ms |
+| `/labs/07/feed-fixed/` | 2 | 8 ms |
+
+GFK buys schema flexibility with integrity and index support. It fits
+genuinely open-ended targets (audit logs, notifications, tags-on-anything).
+With exactly one target model, the concrete FK is faster on aggregates,
+immune to the resolution explosion, and enforced by the database.
+`labs/test_lab07.py` pins the explosion arithmetic and that both count
+endpoints return identical payloads.
