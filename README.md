@@ -24,6 +24,7 @@ Every lab keeps both endpoints live: `/labs/NN/bad/` and `/labs/NN/good/`.
 | [06](#lab-06--memoization) | Query method called 4× per request | 9 queries / 82 ms | 3 queries / 21 ms | `@cached_property` |
 | [07](#lab-07--generic-foreign-keys) | GenericForeignKey where a concrete FK would do | 60 ms / 51 queries | 10 ms / 2 queries | concrete FK (or composite index + prefetch) |
 | [08](#lab-08--orm-query-cache) | Recomputing identical reads | 33 ms/req | 7 ms/req | django-cachalot — with a process-level staleness boundary |
+| [09](#lab-09--raw-sql) | Double to-many `annotate(Count)` | 9,346 ms | 32 ms | correlated subqueries via raw SQL |
 
 ### Lab 01 — N+1 queries
 
@@ -290,3 +291,36 @@ settings. For everything else, explicit caching with chosen keys and TTLs
 `labs/test_lab08.py` pins payload equality between cached and uncached
 paths and both write endpoints' effects (cachalot stays out of test
 settings, so tests always compute).
+
+### Lab 09 — Raw SQL
+
+Task: 20 posts with their comment count and like count. The ORM's natural
+spelling joins both to-many tables at once, and a SQL join of two to-many
+relations produces the cross-product — every comment paired with every
+like:
+
+    Post.objects.annotate(comment_count=Count("comments"),
+                          like_count=Count("likes"))
+
+| Endpoint | Result | Time |
+|----------|--------|------|
+| `/labs/09/wrong/` | both counts = comments × likes (17,845,380 for a 28,326-comment, 630-like post) | 3,502 ms |
+| `/labs/09/bad/` — `Count(..., distinct=True)` | correct | 9,346 ms |
+| `/labs/09/good/` — raw SQL | correct | 32 ms |
+
+`distinct=True` restores correctness but not the plan: the join still
+materializes ~18M rows for the heavy post, then pays de-duplication on top.
+The raw rewrite replaces join-then-group with two correlated subqueries —
+each of the 20 posts runs two small indexed counts, so the work scales with
+the page's own rows, never a product:
+
+    SELECT p.id, p.title,
+           (SELECT count(*) FROM core_comment c WHERE c.post_id = p.id),
+           (SELECT count(*) FROM core_postlike l WHERE l.post_id = p.id)
+      FROM core_post p ORDER BY p.id LIMIT 20
+
+What raw SQL gives up: queryset composability (no further `.filter()`),
+portability across databases, and the ORM's parameter handling unless
+placeholders are used rigorously. The same plan is reachable inside the ORM
+with `Subquery(...)` annotations — clumsier to read, but it keeps
+composability; raw SQL is the escape hatch, not the first resort.
