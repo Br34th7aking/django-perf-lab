@@ -85,7 +85,7 @@ Compose stack up (web/db/redis) · settings package · models + seed · DRF + si
 
 ## Arc B — Beyond the ORM
 
-- [ ] **Lab 8 · ORM query cache** — django-cachalot on/off; show a table write invalidating that table's cached queries; show the trap: scripts/management commands bypassing invalidation unless enabled. **Prove:** repeat-request time with/without cachalot.
+- [x] **Lab 8 · ORM query cache** — django-cachalot on/off; show a table write invalidating that table's cached queries; show the trap: scripts/management commands bypassing invalidation unless enabled. **Prove:** repeat-request time with/without cachalot. *(Done: 33→7 ms; ORM + in-process raw SQL both invalidate (cursor patched — sharper than planned); external/psql writes don't → measured stale read. Narrow-profile verdict in README.)*
 - [ ] **Lab 9 · Raw SQL** — one aggregate the ORM produces badly; rewrite with `raw()`/custom SQL. **Prove:** query plans + timings side by side; note what you give up (portability, safety of composition).
 - [ ] **Lab 10 · Denormalization** — `comment_count` column maintained on write vs `annotate(Count(...))` per read. **Prove:** read win AND the doubled-write/sync cost, both measured.
 - [ ] **Lab 11 · Read replica** — second postgres in compose + streaming replication + Django DB router (reads→replica). **Prove:** routing works; demo replication lag / read-your-writes anomaly.
@@ -114,7 +114,7 @@ Compose stack up (web/db/redis) · settings package · models + seed · DRF + si
 ## Milestones
 
 - [x] **M0** — Lab 0 done: stack up, seeded, silk live, CI green
-- [ ] **M1** — Arc A done (labs 1–7): README "Query reduction" section, every lab with numbers
+- [x] **M1** — Arc A done (labs 1–7): README "Query reduction" section, every lab with numbers
 - [ ] **M2** — Arc B done (labs 8–13)
 - [ ] **M3** — Arc C done (labs 14–16)
 - [ ] **M4** — Arc D done (labs 17–20): worker + beat in compose
@@ -130,8 +130,8 @@ A real DRF + React app where the techniques appear in context instead of isolati
 ## STATE  *(update after every sitting)*
 
 - **Last updated:** 2026-09-09
-- **Where we are:** Lab 7 complete on branch `lab-07`, README entry pending user review before PR. Like (GFK) + PostLike (concrete) mirrored at 200k rows in seed. Aggregate: generic join seq-scans all likes + on-disk sort (60 ms) vs concrete indexed nested loop touching only the page (10 ms). Feed: content_object lazy = 51 queries; prefetch = 1 per content type. **Lab 7 merges ⇒ Arc A complete ⇒ M1.**
-- **Next action:** PR for lab-07 after README approval → tick M1 → Lab 8 (Arc B opener): django-cachalot ORM query cache, install + on/off measurement + invalidation trap.
+- **Where we are:** Lab 8 complete on branch `lab-08`, README entry pending user review before PR. 33→7 ms repeat reads; invalidation boundary established as process-level (cursor-patched raw SQL invalidates, external psql write does not — stale 631-vs-632 measured). redis client + cachalot added to requirements; CACHES: Redis in base, locmem in test. Recurring frictions: stale-worker-after-failed-boot (twice now — restart web when a new module 500s despite correct code), dev deps wiped on every image rebuild (reinstall requirements-dev, or add a dev build stage — undecided).
+- **Next action:** After README approval → PR → Lab 9: raw SQL. One aggregate the ORM writes badly; rewrite with raw()/custom SQL; plans + timings side by side.
 - **Session log:**
   - 2026-09-04 — plan created.
   - 2026-09-05 — scaffold: compose stack (healthchecks, .dockerignore), django project, settings package, postgres wired. Docker Desktop port-forward glitch fixed by recreate.
@@ -142,4 +142,5 @@ A real DRF + React app where the techniques appear in context instead of isolati
   - 2026-09-09 — Lab 4 built + measured (same sitting). 37×/21× time/memory spread across full→only→values; user spotted values_list memory result before explanation. **Lab 4 done**, PR merged.
   - 2026-09-09 — Lab 5 built + load-tested (same sitting). Both 500s traced to stale worker, not code; locust runs by Claude at user's request. **Lab 5 done**, PR merged.
   - 2026-09-09 — Lab 6 built + measured (same sitting). 9→3 queries via cached_property; README emphasizes lifetime-based safety + mid-request write caveat. User set README voice rule: human technical prose, no conversational framing; review entries before PR. **Lab 6 done**, PR merged.
-  - 2026-09-10 — Lab 7 built + measured. EXPLAIN contrast: generic hash-join-everything vs concrete nested-loop-the-page. **Lab 7 done**, awaiting README approval → PR → M1.
+  - 2026-09-10 — Lab 7 built + measured. EXPLAIN contrast: generic hash-join-everything vs concrete nested-loop-the-page. **Lab 7 done**, PR merged, **M1 ticked**.
+  - 2026-09-10 — Lab 8 built + measured (same sitting). Claude's predicted raw-SQL trap was wrong (cachalot patches the cursor); corrected to process-boundary trap, demonstrated via psql. Discussed industry context: transparent query caching is niche (MySQL 8.0 removed theirs); README verdict framed accordingly. **Lab 8 done**, awaiting README approval.

@@ -23,6 +23,7 @@ Every lab keeps both endpoints live: `/labs/NN/bad/` and `/labs/NN/good/`.
 | [05](#lab-05--unbounded-queries) | List endpoint with no pagination | 22 s median @ 10 users | 29 ms median | paginate |
 | [06](#lab-06--memoization) | Query method called 4× per request | 9 queries / 82 ms | 3 queries / 21 ms | `@cached_property` |
 | [07](#lab-07--generic-foreign-keys) | GenericForeignKey where a concrete FK would do | 60 ms / 51 queries | 10 ms / 2 queries | concrete FK (or composite index + prefetch) |
+| [08](#lab-08--orm-query-cache) | Recomputing identical reads | 33 ms/req | 7 ms/req | django-cachalot — with a process-level staleness boundary |
 
 ### Lab 01 — N+1 queries
 
@@ -254,3 +255,38 @@ With exactly one target model, the concrete FK is faster on aggregates,
 immune to the resolution explosion, and enforced by the database.
 `labs/test_lab07.py` pins the explosion arithmetic and that both count
 endpoints return identical payloads.
+
+### Lab 08 — ORM query cache
+
+django-cachalot caches every queryset result in Redis, keyed by the SQL,
+and invalidates all cached queries for a table whenever that table is
+written. Workload: Lab 7's 33 ms like-count aggregate.
+
+| Step | Time |
+|------|------|
+| Uncached, every request | 33 ms |
+| Cache miss (computes + stores) | 34 ms |
+| Cache hit | 7 ms |
+| After ORM write to `core_like` | 34 ms (invalidated), then 7 ms |
+
+Invalidation reaches further than expected: raw SQL through Django's cursor
+is also caught — cachalot patches the cursor and parses statements for
+table names. The boundary is the *process*, not the API. A write from
+outside — psql in this experiment, in production an ETL job, another
+service, or a management command running under settings without cachalot —
+invalidates nothing: after an external INSERT, the cache served like-count
+631 in 10 ms while the database held 632, and stayed wrong until the next
+in-process write or TTL expiry (300 s default).
+
+Table-level granularity sets the profile narrowly: one write to a table
+evicts every cached query touching it, so write-active tables thrash the
+cache and pay Redis round-trips for nothing. Postgres has no query cache
+and MySQL removed theirs in 8.0 for exactly this invalidation-churn reason.
+Transparent query caching fits read-heavy, rarely-written tables — content,
+catalogs, configuration — and cachalot can be scoped to just those via
+settings. For everything else, explicit caching with chosen keys and TTLs
+(labs 14–16) keeps the staleness trade-off visible in the code.
+
+`labs/test_lab08.py` pins payload equality between cached and uncached
+paths and both write endpoints' effects (cachalot stays out of test
+settings, so tests always compute).
