@@ -26,6 +26,7 @@ Every lab keeps both endpoints live: `/labs/NN/bad/` and `/labs/NN/good/`.
 | [08](#lab-08--orm-query-cache) | Recomputing identical reads | 33 ms/req | 7 ms/req | django-cachalot — with a process-level staleness boundary |
 | [09](#lab-09--raw-sql) | Double to-many `annotate(Count)` | 9,346 ms | 32 ms | correlated subqueries via raw SQL |
 | [10](#lab-10--denormalization) | Aggregate recomputed per read | 406 ms | 26 ms | `comment_count` column, maintained on write (+79% write cost) |
+| [11](#lab-11--read-replica) | Every query on one database | single node | reads on a streaming replica | DB router — plus the read-your-writes anomaly it creates |
 
 ### Lab 01 — N+1 queries
 
@@ -357,3 +358,36 @@ Adding the column also broke lab 9: its `annotate(comment_count=...)`
 collided with the new field name and Django raised `ValueError` at query
 construction. A denormalized column claims a name application-wide — every
 existing annotation of that name is in its blast radius.
+
+### Lab 11 — Read replica
+
+A second postgres joins the compose stack as a streaming replica: on first
+boot it clones the primary with `pg_basebackup`, then continuously replays
+the primary's write-ahead log. Replication is asynchronous — the primary
+acknowledges commits without waiting — so the replica trails by a lag
+window. This lab pins that window at 2 s (`recovery_min_apply_delay`) to
+make it observable instead of a race:
+
+    INSERT on primary → replica immediately: 0 rows → replica after 3 s: 1 row
+
+Django learns about the second database through a router: `db_for_read`
+returns `replica`, `db_for_write` returns `default`, migrations stay on the
+primary. No application code changes — every read in labs 1–10 moved to the
+replica by configuration alone.
+
+The architecture's built-in bug, reproduced deterministically at
+`/labs/11/anomaly/` — write a row, read it back the way normal code would:
+
+    {"immediately_visible_via_normal_read_path": false,
+     "immediately_visible_on_primary": true}
+
+The write exists, but the reader is looking at the past: post a comment,
+the page refreshes, the comment is gone — until the lag window passes. The
+fix is in the second boolean: reads that must see fresh writes pin to the
+primary (`.using("default")` per query, or per-request stickiness after a
+write). Designing around lag is the cost of the read scaling; synchronous
+replication removes the lag by making every commit wait for the replica.
+
+`labs/test_lab11.py` pins the router's routing table and the endpoint's
+cleanup; replica-dependent behavior stays out of CI (no replica container
+there — the router is dev-settings only).
