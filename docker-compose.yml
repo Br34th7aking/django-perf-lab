@@ -32,7 +32,31 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-    
+  
+  db_replica:
+    image: postgres:17-alpine
+    user: postgres
+    environment:
+      - PGPASSWORD=replicate
+    volumes:
+      - pgreplica:/var/lib/postgresql/data
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "
+      if [ ! -s /var/lib/postgresql/data/PG_VERSION ]; then
+        pg_basebackup -h db -U replicator -D /var/lib/postgresql/data -X stream -R;
+      fi;
+      chmod 0700 /var/lib/postgresql/data;
+      exec postgres -c hot_standby=on -c recovery_min_apply_delay=2s"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U perflab -d perflab"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+     
   redis:
     image: redis:7-alpine
     healthcheck:
@@ -43,4 +67,5 @@ services:
   
 volumes:
   pgdata:
+  pgreplica:
 
