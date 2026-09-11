@@ -52,6 +52,7 @@ class Post(TimestampedModel):
     published_on = models.DateTimeField(null=True) # unindexed, bad
     published_on_idx = models.DateTimeField(null=True, db_index=True) # indexed
     generic_likes = GenericRelation(Like)
+    comment_count = models.PositiveIntegerField(default=0)
 
     def __str__(self):
         return self.title[:80]
@@ -85,3 +86,22 @@ class Comment(TimestampedModel):
 class PostLike(TimestampedModel):
     """Concrete equivalent: can only like posts, and that's the point."""
     post = models.ForeignKey(Post, on_delete=models.CASCADE, related_name="likes")
+
+
+from django.db.models.signals import post_delete, post_save
+from django.dispatch import receiver
+
+
+@receiver(post_save, sender=Comment)
+def _comment_added(sender, instance, created, **kwargs):
+    if created:
+        Post.objects.filter(pk=instance.post_id).update(
+            comment_count=models.F("comment_count") + 1
+        )
+
+
+@receiver(post_delete, sender=Comment)
+def _comment_removed(sender, instance, **kwargs):
+    Post.objects.filter(pk=instance.post_id).update(
+        comment_count=models.F("comment_count") - 1
+    )

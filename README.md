@@ -25,6 +25,7 @@ Every lab keeps both endpoints live: `/labs/NN/bad/` and `/labs/NN/good/`.
 | [07](#lab-07--generic-foreign-keys) | GenericForeignKey where a concrete FK would do | 60 ms / 51 queries | 10 ms / 2 queries | concrete FK (or composite index + prefetch) |
 | [08](#lab-08--orm-query-cache) | Recomputing identical reads | 33 ms/req | 7 ms/req | django-cachalot — with a process-level staleness boundary |
 | [09](#lab-09--raw-sql) | Double to-many `annotate(Count)` | 9,346 ms | 32 ms | correlated subqueries via raw SQL |
+| [10](#lab-10--denormalization) | Aggregate recomputed per read | 406 ms | 26 ms | `comment_count` column, maintained on write (+79% write cost) |
 
 ### Lab 01 — N+1 queries
 
@@ -324,3 +325,35 @@ portability across databases, and the ORM's parameter handling unless
 placeholders are used rigorously. The same plan is reachable inside the ORM
 with `Subquery(...)` annotations — clumsier to read, but it keeps
 composability; raw SQL is the escape hatch, not the first resort.
+
+### Lab 10 — Denormalization
+
+"Top 20 most-commented posts" computed per read must count 500k comments
+and group 100k posts before it can sort. Storing the answer — a
+`comment_count` column on `Post`, incremented and decremented by
+`post_save`/`post_delete` signal receivers using `F()` expressions (atomic
+in the database, no read-modify-write race) — turns the read into an
+ORDER BY + LIMIT.
+
+| Operation | Computed | Stored column |
+|-----------|----------|---------------|
+| Read: top-20 by comment count | 406 ms | 26 ms |
+| Write: 1,000 comment inserts | 523 ms | 936 ms (+79%) |
+| Rebuild counter from truth | — | 1.25 s (full recount) |
+
+The read win is paid for on every write: each comment insert now runs two
+statements, its own INSERT plus the post's UPDATE. Denormalization is a
+bet that the read/write ratio is high enough to cover that tax — here,
+one hot read per 15 writes already breaks even.
+
+The counter is only as true as the code paths that maintain it.
+`bulk_create` skips signals, so the seed command backfills with one UPDATE
+afterwards — and `labs/test_lab10.py` pins the drift as documented
+behavior. Any writer outside the maintenance path (raw SQL, another
+service, an ETL) silently desynchronizes the column; the 1.25 s rebuild is
+the recovery tool, cheap enough to run on a schedule.
+
+Adding the column also broke lab 9: its `annotate(comment_count=...)`
+collided with the new field name and Django raised `ValueError` at query
+construction. A denormalized column claims a name application-wide — every
+existing annotation of that name is in its blast radius.

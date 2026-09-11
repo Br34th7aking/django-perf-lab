@@ -11,14 +11,17 @@ class PostStatsWrong(APIView):
 
     def get(self, request):
         qs = (
-            Post.objects.annotate(
-                comment_count=Count("comments"),
-                like_count=Count("likes"),
-            )
+            Post.objects.annotate(cc=Count("comments"), lc=Count("likes"))
             .order_by("id")
-            .values("id", "title", "comment_count", "like_count")[:20]
+            .values("id", "title", "cc", "lc")[:20]
         )
-        return Response(list(qs))
+        return Response(
+            [
+                {"id": r["id"], "title": r["title"],
+                 "comment_count": r["cc"], "like_count": r["lc"]}
+                for r in qs
+            ]
+        )
 
 
 class PostStatsBad(APIView):
@@ -26,13 +29,19 @@ class PostStatsBad(APIView):
     def get(self, request):
         qs = (
             Post.objects.annotate(
-                comment_count=Count("comments", distinct=True),
-                like_count=Count("likes", distinct=True),
+                cc=Count("comments", distinct=True),
+                lc=Count("likes", distinct=True),
             )
             .order_by("id")
-            .values("id", "title", "comment_count", "like_count")[:20]
+            .values("id", "title", "cc", "lc")[:20]
         )
-        return Response(list(qs))
+        return Response(
+            [
+                {"id": r["id"], "title": r["title"],
+                 "comment_count": r["cc"], "like_count": r["lc"]}
+                for r in qs
+            ]
+        )
 
     
 class PostStatsGood(APIView):

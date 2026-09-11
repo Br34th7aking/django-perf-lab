@@ -97,6 +97,14 @@ class Command(BaseCommand):
                 batch_size=1000,
             )
             self.stdout.write(f"comments {min(start + CHUNK, N_COMMENTS)}/{N_COMMENTS}")
+        
+        with connection.cursor() as cur:
+            cur.execute(
+                f"UPDATE {Post._meta.db_table} p SET comment_count ="
+                f" (SELECT count(*) FROM {Comment._meta.db_table} c"
+                " WHERE c.post_id = p.id)"
+            )
+            self.stdout.write("comment_count backfilled")
 
         post_ct = ContentType.objects.get_for_model(Post)
         N_LIKES = 200000
