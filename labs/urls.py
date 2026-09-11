@@ -1,6 +1,6 @@
 from django.urls import path
 
-from . import lab01, lab02, lab03, lab04, lab05, lab06, lab07, lab08, lab09, views
+from . import lab01, lab02, lab03, lab04, lab05, lab06, lab07, lab08, lab09, lab10, views
 
 urlpatterns = [
     path("health/", views.Health.as_view()),
@@ -35,4 +35,6 @@ urlpatterns = [
     path("09/wrong/", lab09.PostStatsWrong.as_view()),
     path("09/bad/", lab09.PostStatsBad.as_view()),
     path("09/good/", lab09.PostStatsGood.as_view()),
+    path("10/bad/", lab10.TopPostsComputed.as_view()),
+    path("10/good/", lab10.TopPostsStored.as_view()),
 ]
