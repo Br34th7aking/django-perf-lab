@@ -27,6 +27,7 @@ Every lab keeps both endpoints live: `/labs/NN/bad/` and `/labs/NN/good/`.
 | [09](#lab-09--raw-sql) | Double to-many `annotate(Count)` | 9,346 ms | 32 ms | correlated subqueries via raw SQL |
 | [10](#lab-10--denormalization) | Aggregate recomputed per read | 406 ms | 26 ms | `comment_count` column, maintained on write (+79% write cost) |
 | [11](#lab-11--read-replica) | Every query on one database | single node | reads on a streaming replica | DB router — plus the read-your-writes anomaly it creates |
+| [12](#lab-12--redis-as-write-buffer) | Hot-row UPDATE per page view | 2,637 increments/s | 13,303 increments/s | Redis `INCR` + batched flush |
 
 ### Lab 01 — N+1 queries
 
@@ -391,3 +392,28 @@ replication removes the lag by making every commit wait for the replica.
 `labs/test_lab11.py` pins the router's routing table and the endpoint's
 cleanup; replica-dependent behavior stays out of CI (no replica container
 there — the router is dev-settings only).
+
+### Lab 12 — Redis as write buffer
+
+View counters write on every page view. As a postgres UPDATE that means a
+row lock, a WAL flush, and a new row version per hit (the load test left
+618 dead tuples on `core_post`). Alternative: `INCR post:<id>:pending_views`
+in Redis, plus a `flush_views` command that moves accumulated deltas into
+postgres in one UPDATE. Reads return flushed + pending.
+
+| Layer | UPDATE per hit | INCR + flush |
+|-------|----------------|--------------|
+| HTTP request, median (1 worker) | 5.8 ms | 4.2 ms |
+| 8 threads, one hot row/key | 2,637 ops/s | 13,303 ops/s |
+| Postgres writes for 3,200 views | 3,200 | 1 |
+
+The flush uses `GETDEL`, which is atomic, so increments either land in the
+flushed value or recreate the key for the next run. Ran it mid-load-test;
+no counts lost.
+
+Caveats: the HTTP row is muted (single sync worker, so row contention never
+actually fires), and the thread bench ran on local NVMe — real fsync
+latency would widen the gap. Trade-off: Redis is memory-first, so a crash
+loses up to one flush interval of counts. Fine for views, not for money.
+The column stays in postgres because it needs to join/sort/back up with
+everything else.

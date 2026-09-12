@@ -53,6 +53,7 @@ class Post(TimestampedModel):
     published_on_idx = models.DateTimeField(null=True, db_index=True) # indexed
     generic_likes = GenericRelation(Like)
     comment_count = models.PositiveIntegerField(default=0)
+    view_count = models.PositiveBigIntegerField(default=0)
 
     def __str__(self):
         return self.title[:80]
