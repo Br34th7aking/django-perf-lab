@@ -14,6 +14,7 @@ from . import (
     lab11,
     lab12,
     lab13,
+    lab14,
     views,
 )
 
@@ -59,4 +60,5 @@ urlpatterns = [
     path("13/bad/", lab13.SearchIContains.as_view()),
     path("13/naive/", lab13.SearchFTSNaive.as_view()),
     path("13/good/", lab13.SearchFTSIndexed.as_view()),
+    path("14/bad/", lab14.dashboard_bad)
 ]
