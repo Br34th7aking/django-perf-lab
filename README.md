@@ -29,6 +29,7 @@ Every lab keeps both endpoints live: `/labs/NN/bad/` and `/labs/NN/good/`.
 | [11](#lab-11--read-replica) | Every query on one database | single node | reads on a streaming replica | DB router — plus the read-your-writes anomaly it creates |
 | [12](#lab-12--redis-as-write-buffer) | Hot-row UPDATE per page view | 2,637 increments/s | 13,303 increments/s | Redis `INCR` + batched flush |
 | [13](#lab-13--full-text-search) | `icontains` substring scan | 972–2,466 ms | 12–155 ms | stored `tsvector` + GIN index |
+| [14](#lab-14--response-caching) | dashboard recomputed per request | 870 ms median @ 10 users | 15 ms median @ 50 users | `cache_page(30)` in Redis |
 
 ### Lab 01 — N+1 queries
 
@@ -447,3 +448,40 @@ table you'd use CREATE INDEX CONCURRENTLY. Result semantics also shift
 slightly: substring vs stemmed-word matching disagreed on 11 of ~99,920
 matches, and `labs/test_lab13.py` pins the sharp edge ('baked' matches
 'baking' in FTS, not in icontains).
+
+### Lab 14 — Response caching
+
+The dashboard endpoint aggregates all 500k comments on every request: top
+posts by comment count plus per-category totals, ~180 ms of postgres work
+producing the same JSON each time. `@cache_page(30)` stores the rendered
+response in Redis under a URL-derived key. Warm hits skip the view, the ORM
+and postgres entirely — 13 ms, zero queries.
+
+| run | throughput | median | p95 |
+|-----|------------|--------|-----|
+| recompute, 10 users | 5.5 req/s | 870 ms | 1,300 ms |
+| cached, 10 users | 9.6 req/s | 21 ms | 40 ms |
+| cached, 50 users | 49.3 req/s | 15 ms | 41 ms |
+
+Uncached collapses the way lab 5 did: 180 ms of work per request on a
+single sync worker queues up at 10 users, so the median lands at 5× the
+solo cost. The cached rows are capped by locust's wait time, not the
+server; at 50 users postgres computed the dashboard twice while serving
+1,471 requests.
+
+The price is staleness. Rename a category and hit both endpoints: uncached
+shows the new name immediately, cached serves the pre-write snapshot until
+the TTL lapses. The TTL is set once, at the miss — hits don't extend it —
+so worst-case staleness is exactly 30 s. `cache_page` also emits
+`Cache-Control: max-age=30`, letting browsers and CDNs cache upstream for
+free.
+
+Two leftovers from earlier labs had to come off first: cachalot answered
+the "uncached" endpoint's queries from its own cache (27 ms warm), and the
+lab-11 router sent the aggregation to the delayed replica, where WAL replay
+cancelled it under load ("canceling statement due to conflict with
+recovery"). Both disabled in dev settings since this lab.
+
+`labs/test_lab14.py` pins payload equivalence, the zero-query warm hit, and
+the staleness contract. The local-memory cache in test settings survives
+between tests in a process; an autouse fixture clears it.
