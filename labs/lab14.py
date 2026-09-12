@@ -1,4 +1,5 @@
 from django.db.models import Count
+from django.views.decorators.cache import cache_page
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
@@ -25,3 +26,8 @@ def _build_dashboard():
 def dashboard_bad(request):
     return Response(_build_dashboard())
 
+
+@cache_page(30)
+@api_view(["GET"])
+def dashboard_good(request):
+    return Response(_build_dashboard())
