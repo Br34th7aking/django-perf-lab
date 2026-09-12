@@ -94,7 +94,7 @@ Compose stack up (web/db/redis) · settings package · models + seed · DRF + si
 
 ## Arc C — Caching
 
-- [ ] **Lab 14 · Response caching** — cache the rendered API response (per-view / low-TTL) vs recompute. **Prove:** silk + locust before/after; echoes the serve-from-as-high-up-as-possible principle.
+- [x] **Lab 14 · Response caching** — cache the rendered API response (per-view / low-TTL) vs recompute. **Prove:** silk + locust before/after; echoes the serve-from-as-high-up-as-possible principle. *(Result: 500k-comment dashboard, ~180 ms/request; `cache_page(30)` → 13 ms warm, zero queries. Locust @10 users: 870 ms median recompute vs 21 ms cached; @50 users cached: 49.3 req/s, 15 ms median, 2 recomputes per 1,471 requests. Staleness cycle demonstrated: TTL set at miss, hits don't extend. Cachalot + replica router disabled in local settings — both masked/broke the lab.)*
 - [ ] **Lab 15 · Russian doll** — one template-rendered page (the exception to API-first): nested `{% cache %}`, short-TTL outer ⊃ long-TTL inner keyed on `post.last_modified`. Edit one post → only that fragment re-renders. Add magic `?flush` param. **Prove:** render times: cold / warm / one-fragment-stale.
 - [ ] **Lab 16 · Thundering herd** — many keys with identical TTL expiring together under locust → load spike; fix with ±20% jitter. **Prove:** the spike graph flattens.
 
@@ -129,9 +129,9 @@ A real DRF + React app where the techniques appear in context instead of isolati
 
 ## STATE  *(update after every sitting)*
 
-- **Last updated:** 2026-09-09
-- **Where we are:** Lab 13 complete on branch `lab-13`, PR pending. **Arc B complete when it merges — M2 ticked in this branch.** GeneratedField tsvector + GinIndex; three-way comparison (icontains / naive FTS / indexed FTS) with hit and miss query shapes; naive-FTS-is-worst finding; stem-vs-substring semantics pinned in tests. README voice: plain register now standard (lab 12 entry = reference example).
-- **Next action:** After merge: Arc C — Lab 14 response caching (cache rendered API responses, silk + locust before/after).
+- **Last updated:** 2026-09-12
+- **Where we are:** Lab 14 complete on branch `lab-14`, PR pending. Arc C opened. Response caching via `cache_page(30)` on Redis; recompute-vs-cached measured solo and under locust; staleness contract demonstrated end to end and pinned in tests. **Dev-settings cleanup this lab:** cachalot (lab 8) and the replica router (lab 11) are now commented out in `config/settings/local.py` — cachalot served the "uncached" endpoint from its query cache, and the delayed replica cancelled the heavy aggregation under load (`canceling statement due to conflict with recovery`). Re-enable ad hoc to replay labs 8/11.
+- **Next action:** After merge: Lab 15 russian-doll template caching (nested `{% cache %}`, outer short-TTL ⊃ inner long-TTL keyed on `post.last_modified`, `?flush` param; prove cold/warm/one-fragment-stale render times).
 - **Session log:**
   - 2026-09-04 — plan created.
   - 2026-09-05 — scaffold: compose stack (healthchecks, .dockerignore), django project, settings package, postgres wired. Docker Desktop port-forward glitch fixed by recreate.
@@ -149,3 +149,4 @@ A real DRF + React app where the techniques appear in context instead of isolati
   - 2026-09-11 — Lab 11 built + verified (same sitting). Real streaming replication in compose; WAL propagation demoed live (0 rows → 1 row across the 2 s window); router split verified from the shell; anomaly deterministic. **Lab 11 done**, PR merged.
   - 2026-09-12 — Lab 12 built + measured. Locust client numbers proved useless under single-worker saturation (good "slower" than bad — noise); pivoted to silk medians + direct store-level thread bench. Discussed why counters flush to postgres instead of living in Redis. User challenged README voice ("does this look human-written?") — plain register adopted, memory updated. **Lab 12 done**, PR merged.
   - 2026-09-12 — Lab 13 built + measured (same sitting). Naive-FTS-slower-than-icontains surprise; miss-queries-scan-twice mechanism identified; migration cost reconstructed piecewise after another misread `time` output. **Lab 13 done → Arc B complete → M2.**
+  - 2026-09-12 — Lab 14 built + measured (same sitting). Two earlier-lab leftovers ambushed the measurements: cachalot cached the "uncached" endpoint (27 ms warm), replica router got the aggregation cancelled by WAL replay under locust — both disabled in local.py. Staleness demo initially botched by reusing a dying cache entry (TTL set at miss only, hits don't extend); redone with forced miss. **Lab 14 done**, PR pending.
