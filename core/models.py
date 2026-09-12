@@ -2,6 +2,8 @@ import uuid
 
 from django.contrib.contenttypes.fields import GenericForeignKey, GenericRelation
 from django.contrib.contenttypes.models import ContentType
+from django.contrib.postgres.indexes import GinIndex
+from django.contrib.postgres.search import SearchVector, SearchVectorField
 from django.db import models
 from django.utils.functional import cached_property
 
@@ -54,6 +56,15 @@ class Post(TimestampedModel):
     generic_likes = GenericRelation(Like)
     comment_count = models.PositiveIntegerField(default=0)
     view_count = models.PositiveBigIntegerField(default=0)
+
+    search_vector = models.GeneratedField(
+        expression=SearchVector("title", "body", config="english"),
+        output_field=SearchVectorField(),
+        db_persist=True,
+    )
+
+    class Meta:
+        indexes = [GinIndex(fields=["search_vector"])]
 
     def __str__(self):
         return self.title[:80]
