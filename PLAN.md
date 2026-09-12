@@ -90,7 +90,7 @@ Compose stack up (web/db/redis) · settings package · models + seed · DRF + si
 - [x] **Lab 10 · Denormalization** — `comment_count` column maintained on write vs `annotate(Count(...))` per read. **Prove:** read win AND the doubled-write/sync cost, both measured. *(Done: read 406→26 ms; writes +79%; rebuild 1.25 s; bulk_create drift pinned by test; column name collision broke lab 9's annotations — fixed + documented.)*
 - [x] **Lab 11 · Read replica** — second postgres in compose + streaming replication + Django DB router (reads→replica). **Prove:** routing works; demo replication lag / read-your-writes anomaly. *(Done: pg_basebackup + WAL streaming with 2 s apply delay; router splits reads/writes with zero app-code change; anomaly endpoint returns false/true deterministically.)*
 - [x] **Lab 12 · Redis complement** — post view-counter: UPDATE-per-hit in postgres vs Redis INCR (periodic flush). **Prove:** throughput under locust. *(Done: store-level 2,637 vs 13,303 ops/s on hot row; 3,200 writes → 1; GETDEL flush lost nothing under load; 618 dead tuples as MVCC evidence. Locust HTTP layer muted by single worker — noted honestly.)*
-- [ ] **Lab 13 · Search** — `icontains` vs Postgres full-text (`SearchVector` + GIN index). Elasticsearch = optional stretch, not required. **Prove:** timings @100k rows.
+- [x] **Lab 13 · Search** — `icontains` vs Postgres full-text (`SearchVector` + GIN index). Elasticsearch = optional stretch, not required. **Prove:** timings @100k rows. *(Done: 972–2,466 ms scans → 12–155 ms GIN; naive unindexed FTS slowest of all (4.8–17.8 s); generated column so no drift; ES skipped.)*
 
 ## Arc C — Caching
 
@@ -115,7 +115,7 @@ Compose stack up (web/db/redis) · settings package · models + seed · DRF + si
 
 - [x] **M0** — Lab 0 done: stack up, seeded, silk live, CI green
 - [x] **M1** — Arc A done (labs 1–7): README "Query reduction" section, every lab with numbers
-- [ ] **M2** — Arc B done (labs 8–13)
+- [x] **M2** — Arc B done (labs 8–13)
 - [ ] **M3** — Arc C done (labs 14–16)
 - [ ] **M4** — Arc D done (labs 17–20): worker + beat in compose
 - [ ] **M5** — Arc E + polish: README opens with a summary table of all findings. Decision point (user's call): make repo public / pin on GitHub.
@@ -130,8 +130,8 @@ A real DRF + React app where the techniques appear in context instead of isolati
 ## STATE  *(update after every sitting)*
 
 - **Last updated:** 2026-09-09
-- **Where we are:** Lab 12 complete on branch `lab-12`, README entry pending user review before PR. view_count column, bad (UPDATE/hit) + good (INCR) trackers, flush_views command (GETDEL), truth endpoint pins read to primary (.using default — lab 11 router interplay). Measurement layers: silk medians 5.8 vs 4.2 ms (single worker mutes contention), store-level threads 2,637 vs 13,303 ops/s, batching 3,200:1, dead tuples 618. Locust client numbers were saturation noise — silk/store-level used instead.
-- **Next action:** After README approval → PR → Lab 13: search. icontains vs postgres full-text (SearchVector + GIN index) @100k rows. Last lab of Arc B → M2.
+- **Where we are:** Lab 13 complete on branch `lab-13`, PR pending. **Arc B complete when it merges — M2 ticked in this branch.** GeneratedField tsvector + GinIndex; three-way comparison (icontains / naive FTS / indexed FTS) with hit and miss query shapes; naive-FTS-is-worst finding; stem-vs-substring semantics pinned in tests. README voice: plain register now standard (lab 12 entry = reference example).
+- **Next action:** After merge: Arc C — Lab 14 response caching (cache rendered API responses, silk + locust before/after).
 - **Session log:**
   - 2026-09-04 — plan created.
   - 2026-09-05 — scaffold: compose stack (healthchecks, .dockerignore), django project, settings package, postgres wired. Docker Desktop port-forward glitch fixed by recreate.
@@ -147,4 +147,5 @@ A real DRF + React app where the techniques appear in context instead of isolati
   - 2026-09-10 — Lab 9 built + measured (same sitting). Cachalot cache-hit numbers nearly shipped as findings — caught, invalidated, re-measured cold. **Lab 9 done**, PR merged.
   - 2026-09-11 — Lab 10 built + measured. Live demo of denormalization's blast radius: new column name collided with lab 9's annotations. Full trade measured (read 15×, write +79%, rebuild 1.25 s). **Lab 10 done**, PR merged.
   - 2026-09-11 — Lab 11 built + verified (same sitting). Real streaming replication in compose; WAL propagation demoed live (0 rows → 1 row across the 2 s window); router split verified from the shell; anomaly deterministic. **Lab 11 done**, PR merged.
-  - 2026-09-12 — Lab 12 built + measured. Locust client numbers proved useless under single-worker saturation (good "slower" than bad — noise); pivoted to silk medians + direct store-level thread bench. Discussed why counters flush to postgres instead of living in Redis. **Lab 12 done**, awaiting README approval.
+  - 2026-09-12 — Lab 12 built + measured. Locust client numbers proved useless under single-worker saturation (good "slower" than bad — noise); pivoted to silk medians + direct store-level thread bench. Discussed why counters flush to postgres instead of living in Redis. User challenged README voice ("does this look human-written?") — plain register adopted, memory updated. **Lab 12 done**, PR merged.
+  - 2026-09-12 — Lab 13 built + measured (same sitting). Naive-FTS-slower-than-icontains surprise; miss-queries-scan-twice mechanism identified; migration cost reconstructed piecewise after another misread `time` output. **Lab 13 done → Arc B complete → M2.**

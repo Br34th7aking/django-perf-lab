@@ -28,6 +28,7 @@ Every lab keeps both endpoints live: `/labs/NN/bad/` and `/labs/NN/good/`.
 | [10](#lab-10--denormalization) | Aggregate recomputed per read | 406 ms | 26 ms | `comment_count` column, maintained on write (+79% write cost) |
 | [11](#lab-11--read-replica) | Every query on one database | single node | reads on a streaming replica | DB router — plus the read-your-writes anomaly it creates |
 | [12](#lab-12--redis-as-write-buffer) | Hot-row UPDATE per page view | 2,637 increments/s | 13,303 increments/s | Redis `INCR` + batched flush |
+| [13](#lab-13--full-text-search) | `icontains` substring scan | 972–2,466 ms | 12–155 ms | stored `tsvector` + GIN index |
 
 ### Lab 01 — N+1 queries
 
@@ -417,3 +418,32 @@ latency would widen the gap. Trade-off: Redis is memory-first, so a crash
 loses up to one flush interval of counts. Fine for views, not for money.
 The column stays in postgres because it needs to join/sort/back up with
 everything else.
+
+### Lab 13 — Full-text search
+
+`icontains` compiles to `ILIKE '%q%'`: a substring scan over every 2 KB
+body, unindexable by a B-tree. Postgres FTS stores each document as a
+`tsvector` (stemmed words) and answers `tsquery` lookups from a GIN index
+(word → matching rows). The vector lives in a generated column, so postgres
+keeps it current on every write — no drift possible. Endpoints return
+count + first 10 ids; the count matters because it forces full evaluation,
+like a real search UI showing totals.
+
+| `q` | `icontains` | FTS without index | FTS + GIN |
+|-----|-------------|-------------------|-----------|
+| common word (~100k hits) | 972 ms | 4,847 ms | 155 ms |
+| no hits | 2,466 ms | 17,791 ms | 12 ms |
+
+The index is the win, not the API: `SearchVector` without a stored column
+recomputes 30M words of vectors per query and loses to plain `icontains`.
+Misses cost scans double — a matching row lets the check exit early, a miss
+reads everything, and the unfilled `LIMIT` of the sample query forces a
+second full pass. The GIN index inverts that: misses are its fastest case
+(empty posting list, 12 ms).
+
+One-time cost of indexing the backlog: ~10 s for 100k posts (~5 s computing
+vectors, ~0.8 s building the index, plus the table rewrite). On a live
+table you'd use CREATE INDEX CONCURRENTLY. Result semantics also shift
+slightly: substring vs stemmed-word matching disagreed on 11 of ~99,920
+matches, and `labs/test_lab13.py` pins the sharp edge ('baked' matches
+'baking' in FTS, not in icontains).
