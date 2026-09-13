@@ -34,6 +34,7 @@ Every lab keeps both endpoints live: `/labs/NN/bad/` and `/labs/NN/good/`.
 | [16](#lab-16--thundering-herd) | synchronized cache expiry | 20 recomputes in a ~5 s burst every TTL | steady 1–2/s trickle | ±20% TTL jitter |
 | [17](#lab-17--celery-offload) | 2 s email sent inside the request | 12 requests / 12.5 s median @ 10 users | 446 requests / 23 ms median | `.delay()` to a celery worker |
 | [18](#lab-18--the-on_commit-race) | task queued inside the transaction | 50/50 tasks failed `DoesNotExist` | 0/50 failed | `transaction.on_commit()` |
+| [19](#lab-19--priority-queues) | urgent task behind a bulk flood | 12.0 s wait | 2.8 ms wait | dedicated queue per priority |
 
 ### Lab 01 — N+1 queries
 
@@ -642,3 +643,37 @@ rolled-back request still sends its email.
 `django_capture_on_commit_callbacks`: the bad view has published before
 commit with no callback registered; the good view has published nothing
 until the captured callback runs.
+
+### Lab 19 — Priority queues
+
+Celery queues are FIFO. With one queue for everything, a bulk job — 200
+one-second tasks, a newsletter batch — lands in front of whatever comes
+next. The password-reset email enqueued two seconds later sits behind ~185
+newsletters. Nobody notices a late newsletter; everybody notices a late
+password reset.
+
+Every task records its wait (enqueue to start) in Redis. Flood of 200,
+urgent task sent 2 s in:
+
+| | one shared queue | dedicated queues |
+|--|------------------|------------------|
+| urgent wait | 12.0 s | 2.8 ms |
+| bulk wait, median | 7.0 s | 49.3 s |
+| bulk wait, max | 14.1 s | 99.7 s |
+
+The fix is routing, not code: `apply_async(queue="bulk")` sends the flood
+to its own queue, consumed by a second worker container started with
+`-Q bulk --concurrency=2`. The default worker never sees bulk traffic, so
+the urgent task starts in milliseconds while 180 newsletters are still
+queued.
+
+Read the bulk column honestly: bulk got seven times slower, because its
+dedicated worker has 2 children against the default worker's 14. Splitting
+queues adds no capacity — it decides who absorbs the wait, and the whole
+point is that bulk traffic is the traffic that can afford to. In production
+the same shape appears as `task_routes` config (route by task name) rather
+than per-call `queue=` arguments.
+
+`labs/test_lab19.py` pins the routing (flood defaults to the shared queue,
+`?queue=bulk` reroutes it, urgent always targets the default queue) and
+that both tasks record a positive wait.

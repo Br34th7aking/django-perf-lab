@@ -26,3 +26,15 @@ def mark_comment_processed(comment_id):
 def send_confirmation_email(subscriber_id):
     time.sleep(2)
     return subscriber_id
+
+
+@shared_task
+def bulk_task(enqueued_at):
+    r.rpush("lab19:wait:bulk", time.time() - enqueued_at)
+    time.sleep(1)
+
+
+@shared_task
+def urgent_task(enqueued_at):
+    r.rpush("lab19:wait:urgent", time.time() - enqueued_at)
+    time.sleep(0.1)

@@ -37,6 +37,25 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+  worker_bulk:
+    build:
+      context: .
+      target: dev
+    command: celery -A config worker -Q bulk --concurrency=2 --loglevel=info
+    volumes:
+      - .:/app
+    environment:
+      - POSTGRES_HOST=db
+      - POSTGRES_DB=perflab
+      - POSTGRES_USER=perflab
+      - POSTGRES_PASSWORD=perflab
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   db:
     image: postgres:17-alpine
     environment:
