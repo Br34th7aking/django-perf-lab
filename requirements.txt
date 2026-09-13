@@ -5,3 +5,4 @@ gunicorn
 django-silk
 django-cachalot
 redis
+celery[redis]
