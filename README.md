@@ -33,6 +33,7 @@ Every lab keeps both endpoints live: `/labs/NN/bad/` and `/labs/NN/good/`.
 | [15](#lab-15--russian-doll-caching) | one edit re-renders the whole page | 101 queries / 130 ms | 3 queries / 21 ms | nested `{% cache %}` keyed on `last_modified` |
 | [16](#lab-16--thundering-herd) | synchronized cache expiry | 20 recomputes in a ~5 s burst every TTL | steady 1–2/s trickle | ±20% TTL jitter |
 | [17](#lab-17--celery-offload) | 2 s email sent inside the request | 12 requests / 12.5 s median @ 10 users | 446 requests / 23 ms median | `.delay()` to a celery worker |
+| [18](#lab-18--the-on_commit-race) | task queued inside the transaction | 50/50 tasks failed `DoesNotExist` | 0/50 failed | `transaction.on_commit()` |
 
 ### Lab 01 — N+1 queries
 
@@ -606,3 +607,38 @@ still draining the previous run's backlog of 2-second POSTs.
 `labs/test_lab17.py` runs without a broker: it patches the sleep and
 `.delay` and asserts the work happens in-request on the inline path and
 never in-request on the deferred one.
+
+### Lab 18 — The on_commit race
+
+A view creates a comment inside a transaction and queues a task to process
+it. `.delay()` publishes to Redis the moment it's called; the row becomes
+visible to other connections only at COMMIT. The worker's pickup latency is
+~10 ms, so if anything happens between enqueue and commit — more writes,
+serialization, here 50 ms of simulated request work — the worker queries a
+row that isn't there yet. `Comment.DoesNotExist`, for a row that
+definitely gets created.
+
+Each task outcome increments a Redis counter. 50 requests per variant:
+
+| | ghost (`DoesNotExist`) | processed |
+|--|------------------------|-----------|
+| queued inside transaction | 50 | 0 |
+| queued via `on_commit` | 0 | 50 |
+
+The failure shape is what makes this bug expensive in production. The user
+got a 200. The comment row exists — the transaction committed normally
+after the task had already crashed. Only the side effect is missing, and
+the evidence lives in worker logs nobody reads. In real traffic the timing
+varies, so it fails at some fraction of load and never on a developer's
+machine.
+
+The fix defers the publish, not the work:
+`transaction.on_commit(lambda: mark_comment_processed.delay(comment.pk))`.
+Django holds the callback until the surrounding transaction commits and
+drops it on rollback — which also fixes the mirror-image bug where a
+rolled-back request still sends its email.
+
+`labs/test_lab18.py` pins the publish timing with pytest-django's
+`django_capture_on_commit_callbacks`: the bad view has published before
+commit with no callback registered; the good view has published nothing
+until the captured callback runs.
