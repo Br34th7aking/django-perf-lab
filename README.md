@@ -32,6 +32,7 @@ Every lab keeps both endpoints live: `/labs/NN/bad/` and `/labs/NN/good/`.
 | [14](#lab-14--response-caching) | dashboard recomputed per request | 870 ms median @ 10 users | 15 ms median @ 50 users | `cache_page(30)` in Redis |
 | [15](#lab-15--russian-doll-caching) | one edit re-renders the whole page | 101 queries / 130 ms | 3 queries / 21 ms | nested `{% cache %}` keyed on `last_modified` |
 | [16](#lab-16--thundering-herd) | synchronized cache expiry | 20 recomputes in a ~5 s burst every TTL | steady 1–2/s trickle | ±20% TTL jitter |
+| [17](#lab-17--celery-offload) | 2 s email sent inside the request | 12 requests / 12.5 s median @ 10 users | 446 requests / 23 ms median | `.delay()` to a celery worker |
 
 ### Lab 01 — N+1 queries
 
@@ -567,3 +568,41 @@ insurance priced in milliseconds of extra staleness.
 `labs/test_lab16.py` pins the jitter bounds (every timeout within
 0.8–1.2 × TTL, and actually varying) and that warm hits skip the recompute
 path entirely.
+
+### Lab 17 — Celery offload
+
+A subscribe endpoint that sends a confirmation email inline — simulated as
+2 s of blocking work, about what SMTP or a slow third-party API costs. The
+user needs the acknowledgment, but the response also waits for the email.
+On one sync worker the damage compounds: 10 concurrent users means every
+request queues behind seconds of other people's email.
+
+The fix ships the work to a queue. Same function, different call:
+`send_confirmation_email(1)` runs inline; `send_confirmation_email.delay(1)`
+serializes the arguments to Redis and returns a task id. A separate celery
+worker container (new compose service, same image) picks jobs off the
+broker and runs them with 14 prefork children.
+
+| 10 users, 45 s | inline | `.delay()` |
+|----------------|--------|------------|
+| requests served | 12 | 446 |
+| median | 12.5 s | 23 ms |
+| worst | 20.3 s | 100 ms |
+
+The queue is not free capacity, just a better place to wait. The worker
+tops out at 7 tasks/s (14 children × 2 s each); locust fed it 9.9/s, and
+the broker backlog climbed to 68 pending tasks before draining in the ~13 s
+after traffic stopped. Users saw 23 ms throughout; some emails ran ~15 s
+late. The response also changed meaning: 200 used to mean "email sent",
+now it means "email accepted" — failures after that point need retries and
+monitoring instead of an error the user sees.
+
+Two operational notes. Celery workers don't auto-reload — task code changes
+need a container restart, or the old code keeps running silently. And
+locust's time limit abandons in-flight requests without unqueueing them:
+the first "good" measurement read 32 s per request because gunicorn was
+still draining the previous run's backlog of 2-second POSTs.
+
+`labs/test_lab17.py` runs without a broker: it patches the sleep and
+`.delay` and asserts the work happens in-request on the inline path and
+never in-request on the deferred one.
