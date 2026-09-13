@@ -102,7 +102,7 @@ Compose stack up (web/db/redis) · settings package · models + seed · DRF + si
 
 - [x] **Lab 17 · Celery offload** — view doing slow work (simulated email/API call) sync vs `.delay()`. **Prove:** p95 latency before/after under locust. *(Result: 2 s inline email → 12 requests/12.5 s median @ 10 users; `.delay()` → 446 requests/23 ms median. Queue-not-capacity shown: broker backlog peaked at 68, drained ~13 s post-traffic. Infra: celery[redis], config/celery.py, worker compose service. Gotchas recorded: worker no-autoreload; locust abandons but doesn't unqueue in-flight requests — first good run polluted by bad run's 32 s drain.)*
 - [x] **Lab 18 · on_commit race** — create object + queue task inside a transaction → intermittent DoesNotExist; fix with `transaction.on_commit`. **Prove:** reproduce the failure, then zero failures. *(Result: 50 ms post-enqueue work inside the transaction made the race deterministic — 50/50 ghosts vs 0/50 with on_commit; outcomes counted in Redis. Failure shape documented: 200 returned, row exists, side effect silently gone. Publish timing pinned via django_capture_on_commit_callbacks. Demo comments cleaned up after.)*
-- [ ] **Lab 19 · Priority queues** — two queues; flood low-priority; high-priority tasks still picked up instantly. **Prove:** task wait-time comparison.
+- [x] **Lab 19 · Priority queues** — two queues; flood low-priority; high-priority tasks still picked up instantly. **Prove:** task wait-time comparison. *(Result: urgent behind 200-task flood on shared queue waited 12.0 s; on dedicated queues 2.8 ms while 180 bulk tasks still queued. Bulk median went 7.0 s → 49.3 s (2-child bulk worker vs 14) — priority allocates wait, doesn't add capacity. Infra: `worker_bulk` compose service, `-Q bulk --concurrency=2`.)*
 - [ ] **Lab 20 · Celery beat** — scheduled cleanup task (e.g. purge stale rows) vs cron; note retries + monitoring advantages. **Prove:** it fires on schedule, visibly.
 
 ## Arc E — Rollout
@@ -129,9 +129,9 @@ A real DRF + React app where the techniques appear in context instead of isolati
 
 ## STATE  *(update after every sitting)*
 
-- **Last updated:** 2026-09-13
-- **Where we are:** Lab 18 complete on branch `lab-18`, PR pending. on_commit race reproduced deterministically (50/50 task failures queued-inside-transaction, 0/50 with `transaction.on_commit`); Redis outcome counters; broker-free tests via `django_capture_on_commit_callbacks`.
-- **Next action:** After merge: Lab 19 priority queues (two celery queues; flood low-priority; high-priority tasks still picked up instantly; prove with task wait-time comparison).
+- **Last updated:** 2026-09-14
+- **Where we are:** Lab 19 complete on branch `lab-19`, PR pending. Whole lab delegated to Claude (code, measurement, tests, docs) — **user should review labs/lab19.py, labs/tasks.py additions, labs/test_lab19.py, and the worker_bulk compose service.** Wait-time instrumentation in Redis; urgent 12.0 s → 2.8 ms; bulk deliberately slower on its small dedicated worker.
+- **Next action:** After merge: Lab 20 celery beat (scheduled cleanup task vs cron; retries + monitoring advantages; prove it fires on schedule, visibly). Completes Arc D → M4.
 - **Session log:**
   - 2026-09-04 — plan created.
   - 2026-09-05 — scaffold: compose stack (healthchecks, .dockerignore), django project, settings package, postgres wired. Docker Desktop port-forward glitch fixed by recreate.
@@ -153,4 +153,5 @@ A real DRF + React app where the techniques appear in context instead of isolati
   - 2026-09-13 — Lab 15 built + measured. First template-rendered page in the repo; silent-empty-variable gotcha (`author_name` rendered as blank, no error). Query counting through silk needed care twice: silk's EXPLAIN/bookkeeping inflated 101 app queries to 326 captured, and silk's logged SQL text produced a false `core_` match. Discussed russian-doll's applicability to React/JSON stacks. **Lab 15 done**, PR merged.
   - 2026-09-13 — Lab 16 built + measured (same sitting). Herd made visible by logging each recompute's epoch second to a Redis hash → per-second histogram: fixed TTL bursts every 30 s with 25 s silences; jitter decorrelates cycle by cycle. Client percentiles unmoved at toy scale — histogram is the proof, scale arithmetic in README. Close-out delegated: Claude wrote locustfile + tests unreviewed. **Lab 16 done → Arc C complete → M3.** PR merged.
   - 2026-09-13 — Lab 17 built + measured (same sitting). Celery plumbing (broker=redis, worker service) went in clean; first "good" locust run read 32 s/request — gunicorn was draining the bad run's abandoned 2 s POSTs, lesson: drain or restart between runs. Queue-depth sampler showed prefetch masking then 68-task backlog. **Lab 17 done**, PR merged.
-  - 2026-09-13 — Lab 18 built + measured (same sitting). Race reproduced on the very first smoke request; 50 ms in-transaction tail made it 50/50 deterministic. Emphasized failure shape: 200 + row present + side effect gone. 102 demo comments deleted post-demo (signals kept counters honest). **Lab 18 done**, PR pending.
+  - 2026-09-13 — Lab 18 built + measured (same sitting). Race reproduced on the very first smoke request; 50 ms in-transaction tail made it 50/50 deterministic. Emphasized failure shape: 200 + row present + side effect gone. 102 demo comments deleted post-demo (signals kept counters honest). **Lab 18 done**, PR merged.
+  - 2026-09-14 — Lab 19 built + measured, fully delegated to Claude. Second worker service (`worker_bulk`, -Q bulk, concurrency 2); wait-time-per-task instrumentation; 12.0 s vs 2.8 ms urgent wait; bulk-gets-slower trade-off stated in README. **Lab 19 done**, PR pending.
