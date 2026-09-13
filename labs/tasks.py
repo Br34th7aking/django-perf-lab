@@ -29,6 +29,14 @@ def send_confirmation_email(subscriber_id):
 
 
 @shared_task
+def flush_pending_views():
+    from django.core.management import call_command
+
+    call_command("flush_views")
+    r.rpush("lab20:runs", time.time())
+
+
+@shared_task
 def bulk_task(enqueued_at):
     r.rpush("lab19:wait:bulk", time.time() - enqueued_at)
     time.sleep(1)

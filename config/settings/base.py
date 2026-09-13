@@ -139,3 +139,10 @@ CACHES = {
 
 CELERY_BROKER_URL = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = CELERY_BROKER_URL
+
+CELERY_BEAT_SCHEDULE = {
+    "flush-pending-views": {
+        "task": "labs.tasks.flush_pending_views",
+        "schedule": 15.0,
+    },
+}
