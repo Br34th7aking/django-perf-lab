@@ -103,7 +103,7 @@ Compose stack up (web/db/redis) · settings package · models + seed · DRF + si
 - [x] **Lab 17 · Celery offload** — view doing slow work (simulated email/API call) sync vs `.delay()`. **Prove:** p95 latency before/after under locust. *(Result: 2 s inline email → 12 requests/12.5 s median @ 10 users; `.delay()` → 446 requests/23 ms median. Queue-not-capacity shown: broker backlog peaked at 68, drained ~13 s post-traffic. Infra: celery[redis], config/celery.py, worker compose service. Gotchas recorded: worker no-autoreload; locust abandons but doesn't unqueue in-flight requests — first good run polluted by bad run's 32 s drain.)*
 - [x] **Lab 18 · on_commit race** — create object + queue task inside a transaction → intermittent DoesNotExist; fix with `transaction.on_commit`. **Prove:** reproduce the failure, then zero failures. *(Result: 50 ms post-enqueue work inside the transaction made the race deterministic — 50/50 ghosts vs 0/50 with on_commit; outcomes counted in Redis. Failure shape documented: 200 returned, row exists, side effect silently gone. Publish timing pinned via django_capture_on_commit_callbacks. Demo comments cleaned up after.)*
 - [x] **Lab 19 · Priority queues** — two queues; flood low-priority; high-priority tasks still picked up instantly. **Prove:** task wait-time comparison. *(Result: urgent behind 200-task flood on shared queue waited 12.0 s; on dedicated queues 2.8 ms while 180 bulk tasks still queued. Bulk median went 7.0 s → 49.3 s (2-child bulk worker vs 14) — priority allocates wait, doesn't add capacity. Infra: `worker_bulk` compose service, `-Q bulk --concurrency=2`.)*
-- [ ] **Lab 20 · Celery beat** — scheduled cleanup task (e.g. purge stale rows) vs cron; note retries + monitoring advantages. **Prove:** it fires on schedule, visibly.
+- [x] **Lab 20 · Celery beat** — scheduled cleanup task (e.g. purge stale rows) vs cron; note retries + monitoring advantages. **Prove:** it fires on schedule, visibly. *(Result: beat schedules the lab-12 flush_views command as a task every 15 s — firings logged at +0.0/+15.0 s, pending buffer emptied, view_count 16,110→16,120 hands-off. Infra: `beat` compose service. Tests pin schedule→registered-task wiring. Cron-vs-beat trade documented.)*
 
 ## Arc E — Rollout
 
@@ -117,7 +117,7 @@ Compose stack up (web/db/redis) · settings package · models + seed · DRF + si
 - [x] **M1** — Arc A done (labs 1–7): README "Query reduction" section, every lab with numbers
 - [x] **M2** — Arc B done (labs 8–13)
 - [x] **M3** — Arc C done (labs 14–16)
-- [ ] **M4** — Arc D done (labs 17–20): worker + beat in compose
+- [x] **M4** — Arc D done (labs 17–20): worker + beat in compose
 - [ ] **M5** — Arc E + polish: README opens with a summary table of all findings. Decision point (user's call): make repo public / pin on GitHub.
 - [ ] **M6** — Meaty project: scope it fresh when M5 lands (see below). Gated on explicit go.
 
@@ -130,8 +130,8 @@ A real DRF + React app where the techniques appear in context instead of isolati
 ## STATE  *(update after every sitting)*
 
 - **Last updated:** 2026-09-14
-- **Where we are:** Lab 19 complete on branch `lab-19`, PR pending. Whole lab delegated to Claude (code, measurement, tests, docs) — **user should review labs/lab19.py, labs/tasks.py additions, labs/test_lab19.py, and the worker_bulk compose service.** Wait-time instrumentation in Redis; urgent 12.0 s → 2.8 ms; bulk deliberately slower on its small dedicated worker.
-- **Next action:** After merge: Lab 20 celery beat (scheduled cleanup task vs cron; retries + monitoring advantages; prove it fires on schedule, visibly). Completes Arc D → M4.
+- **Where we are:** Lab 20 complete on branch `lab-20`, PR pending. **Arc D complete when it merges — M4 ticked in this branch.** Delegated lab (code, measurement, tests, docs by Claude) — **user should review the tasks.py/base.py/compose additions and labs/test_lab20.py**, plus lab 19's files if not yet reviewed. Beat schedules lab-12's flush; firings 15.0 s apart verified end to end.
+- **Next action:** After merge: Arc E — Lab 21 feature-flag rollout (django-waffle; wrap a risky change in a flag; percentage rollout; kill switch). Completes M5; then M6 scoping (meaty project) is the user's call.
 - **Session log:**
   - 2026-09-04 — plan created.
   - 2026-09-05 — scaffold: compose stack (healthchecks, .dockerignore), django project, settings package, postgres wired. Docker Desktop port-forward glitch fixed by recreate.
@@ -154,4 +154,5 @@ A real DRF + React app where the techniques appear in context instead of isolati
   - 2026-09-13 — Lab 16 built + measured (same sitting). Herd made visible by logging each recompute's epoch second to a Redis hash → per-second histogram: fixed TTL bursts every 30 s with 25 s silences; jitter decorrelates cycle by cycle. Client percentiles unmoved at toy scale — histogram is the proof, scale arithmetic in README. Close-out delegated: Claude wrote locustfile + tests unreviewed. **Lab 16 done → Arc C complete → M3.** PR merged.
   - 2026-09-13 — Lab 17 built + measured (same sitting). Celery plumbing (broker=redis, worker service) went in clean; first "good" locust run read 32 s/request — gunicorn was draining the bad run's abandoned 2 s POSTs, lesson: drain or restart between runs. Queue-depth sampler showed prefetch masking then 68-task backlog. **Lab 17 done**, PR merged.
   - 2026-09-13 — Lab 18 built + measured (same sitting). Race reproduced on the very first smoke request; 50 ms in-transaction tail made it 50/50 deterministic. Emphasized failure shape: 200 + row present + side effect gone. 102 demo comments deleted post-demo (signals kept counters honest). **Lab 18 done**, PR merged.
-  - 2026-09-14 — Lab 19 built + measured, fully delegated to Claude. Second worker service (`worker_bulk`, -Q bulk, concurrency 2); wait-time-per-task instrumentation; 12.0 s vs 2.8 ms urgent wait; bulk-gets-slower trade-off stated in README. **Lab 19 done**, PR pending.
+  - 2026-09-14 — Lab 19 built + measured, fully delegated to Claude. Second worker service (`worker_bulk`, -Q bulk, concurrency 2); wait-time-per-task instrumentation; 12.0 s vs 2.8 ms urgent wait; bulk-gets-slower trade-off stated in README. **Lab 19 done**, PR merged.
+  - 2026-09-14 — Lab 20 built + verified (same sitting, delegated). Beat service wraps flush_views as a 15 s scheduled task; two firings 15.0 s apart, buffer→postgres hands-off. Single-beat-instance rule + cron-vs-beat trade in README. **Lab 20 done → Arc D complete → M4.** PR pending.
