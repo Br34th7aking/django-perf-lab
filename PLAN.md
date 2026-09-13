@@ -107,7 +107,7 @@ Compose stack up (web/db/redis) · settings package · models + seed · DRF + si
 
 ## Arc E — Rollout
 
-- [ ] **Lab 21 · Feature flags** — django-waffle: percentage rollout of a new endpoint variant + `/api/flags/` for JS clients; note cookie-stickiness caveat for tokened API clients (target by user/group instead). **Prove:** ~10% of sessions get the variant.
+- [x] **Lab 21 · Feature flags** — django-waffle: percentage rollout of a new endpoint variant + `/api/flags/` for JS clients; note cookie-stickiness caveat for tokened API clients (target by user/group instead). **Prove:** ~10% of sessions get the variant. *(Result: lab-13 engine swap behind `fts-search` percent=10 flag — 37/300 fresh sessions (12.3%) got FTS; cookie stickiness 8/8; kill switch everyone=False → 100% fallback in one request. Two traps found+tested: queryset.update() bypasses waffle's cache-flush signal (flip with .save()); DRF request wrapper hides the roll from the cookie middleware (pass request._request) — same no-cookie flicker tokened API clients get, target those by user/group.)*
 
 ---
 
@@ -130,8 +130,8 @@ A real DRF + React app where the techniques appear in context instead of isolati
 ## STATE  *(update after every sitting)*
 
 - **Last updated:** 2026-09-14
-- **Where we are:** Lab 20 complete on branch `lab-20`, PR pending. **Arc D complete when it merges — M4 ticked in this branch.** Delegated lab (code, measurement, tests, docs by Claude) — **user should review the tasks.py/base.py/compose additions and labs/test_lab20.py**, plus lab 19's files if not yet reviewed. Beat schedules lab-12's flush; firings 15.0 s apart verified end to end.
-- **Next action:** After merge: Arc E — Lab 21 feature-flag rollout (django-waffle; wrap a risky change in a flag; percentage rollout; kill switch). Completes M5; then M6 scoping (meaty project) is the user's call.
+- **Where we are:** Lab 21 complete on branch `lab-21`, PR pending — **all 21 labs done.** Delegated lab — **user should review labs/lab21.py, labs/test_lab21.py, and the waffle settings additions.** M5 is one decision short: the README findings table is complete (21 rows), so what remains is the user's call on making the repo public / pinning it. M6 (meaty project) scoping is gated on explicit go.
+- **Next action:** User merges PR; decides M5 (public/pin); then M6 scoping discussion if wanted.
 - **Session log:**
   - 2026-09-04 — plan created.
   - 2026-09-05 — scaffold: compose stack (healthchecks, .dockerignore), django project, settings package, postgres wired. Docker Desktop port-forward glitch fixed by recreate.
@@ -155,4 +155,5 @@ A real DRF + React app where the techniques appear in context instead of isolati
   - 2026-09-13 — Lab 17 built + measured (same sitting). Celery plumbing (broker=redis, worker service) went in clean; first "good" locust run read 32 s/request — gunicorn was draining the bad run's abandoned 2 s POSTs, lesson: drain or restart between runs. Queue-depth sampler showed prefetch masking then 68-task backlog. **Lab 17 done**, PR merged.
   - 2026-09-13 — Lab 18 built + measured (same sitting). Race reproduced on the very first smoke request; 50 ms in-transaction tail made it 50/50 deterministic. Emphasized failure shape: 200 + row present + side effect gone. 102 demo comments deleted post-demo (signals kept counters honest). **Lab 18 done**, PR merged.
   - 2026-09-14 — Lab 19 built + measured, fully delegated to Claude. Second worker service (`worker_bulk`, -Q bulk, concurrency 2); wait-time-per-task instrumentation; 12.0 s vs 2.8 ms urgent wait; bulk-gets-slower trade-off stated in README. **Lab 19 done**, PR merged.
-  - 2026-09-14 — Lab 20 built + verified (same sitting, delegated). Beat service wraps flush_views as a 15 s scheduled task; two firings 15.0 s apart, buffer→postgres hands-off. Single-beat-instance rule + cron-vs-beat trade in README. **Lab 20 done → Arc D complete → M4.** PR pending.
+  - 2026-09-14 — Lab 20 built + verified (same sitting, delegated). Beat service wraps flush_views as a 15 s scheduled task; two firings 15.0 s apart, buffer→postgres hands-off. Single-beat-instance rule + cron-vs-beat trade in README. **Lab 20 done → Arc D complete → M4.** PR merged.
+  - 2026-09-14 — Lab 21 built + measured (same sitting, delegated). Lab-13 engine swap behind a waffle percent flag; 12.3% of 300 sessions on target. Two real traps mid-build: stale flag cache from update()-without-signals (kill switch silently dead), and DRF's request wrapper eating the rollout cookie (no stickiness) — both fixed, both pinned in tests, both in README. Discussed LaunchDarkly as managed equivalent. **Lab 21 done — all 21 labs complete.** PR pending.
