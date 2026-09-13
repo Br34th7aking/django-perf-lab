@@ -35,6 +35,7 @@ Every lab keeps both endpoints live: `/labs/NN/bad/` and `/labs/NN/good/`.
 | [17](#lab-17--celery-offload) | 2 s email sent inside the request | 12 requests / 12.5 s median @ 10 users | 446 requests / 23 ms median | `.delay()` to a celery worker |
 | [18](#lab-18--the-on_commit-race) | task queued inside the transaction | 50/50 tasks failed `DoesNotExist` | 0/50 failed | `transaction.on_commit()` |
 | [19](#lab-19--priority-queues) | urgent task behind a bulk flood | 12.0 s wait | 2.8 ms wait | dedicated queue per priority |
+| [20](#lab-20--celery-beat) | write buffer flushed by hand | manual `flush_views` runs | fires every 15.0 s, verified | celery beat schedule |
 
 ### Lab 01 — N+1 queries
 
@@ -677,3 +678,40 @@ than per-call `queue=` arguments.
 `labs/test_lab19.py` pins the routing (flood defaults to the shared queue,
 `?queue=bulk` reroutes it, urgent always targets the default queue) and
 that both tasks record a positive wait.
+
+### Lab 20 — Celery beat
+
+Lab 12's write buffer left a chore behind: `flush_views` moves pending
+view counts from Redis into postgres, and someone has to run it. The cron
+version of that chore lives in a crontab on some host — outside the repo,
+outside code review, with the virtualenv and env vars wired in by hand and
+failures going to a mail spool. Beat moves the schedule into settings:
+
+    CELERY_BEAT_SCHEDULE = {
+        "flush-pending-views": {
+            "task": "labs.tasks.flush_pending_views",
+            "schedule": 15.0,
+        },
+    }
+
+The task wraps the existing management command — that's the migration path
+for real cron scripts too. Beat is a scheduler, not a worker: a new compose
+service that only publishes the task on each tick; the existing worker
+executes it, with the retries, routing, and monitoring every other task
+gets. Run exactly one beat instance — two schedulers means every job fires
+twice.
+
+Verification: 10 views buffered through the lab-12 endpoint, then hands
+off. Beat fired at +0.0 s and +15.0 s (each run logs its timestamp), the
+pending key emptied, and `view_count` went 16,110 → 16,120 in postgres.
+The 15 s interval is demo-frequent; the same entry with
+`crontab(minute="*/5")` is the production shape.
+
+For a one-server app with one script, cron is fine. Beat earns its extra
+always-on process when schedules need code review, tasks need retries, or
+jobs shouldn't pile up processes on whichever host owns the crontab.
+
+`labs/test_lab20.py` pins that the schedule entry points at a task that is
+actually registered (the classic beat failure is a renamed task and a
+schedule still pointing at the old path) and that the task flushes and
+logs its run.
