@@ -30,6 +30,7 @@ Every lab keeps both endpoints live: `/labs/NN/bad/` and `/labs/NN/good/`.
 | [12](#lab-12--redis-as-write-buffer) | Hot-row UPDATE per page view | 2,637 increments/s | 13,303 increments/s | Redis `INCR` + batched flush |
 | [13](#lab-13--full-text-search) | `icontains` substring scan | 972–2,466 ms | 12–155 ms | stored `tsvector` + GIN index |
 | [14](#lab-14--response-caching) | dashboard recomputed per request | 870 ms median @ 10 users | 15 ms median @ 50 users | `cache_page(30)` in Redis |
+| [15](#lab-15--russian-doll-caching) | one edit re-renders the whole page | 101 queries / 130 ms | 3 queries / 21 ms | nested `{% cache %}` keyed on `last_modified` |
 
 ### Lab 01 — N+1 queries
 
@@ -485,3 +486,41 @@ recovery"). Both disabled in dev settings since this lab.
 `labs/test_lab14.py` pins payload equivalence, the zero-query warm hit, and
 the staleness contract. The local-memory cache in test settings survives
 between tests in a process; an autouse fixture clears it.
+
+### Lab 15 — Russian-doll caching
+
+Lab 14's whole-response cache has a blunt failure mode: one changed post
+invalidates everything, and the rebuild pays full price. This lab caches in
+nested layers instead. The page is the repo's only template-rendered view
+(fragment caching is a template mechanism — `{% cache %}` has no meaning in
+a JSON API): 50 posts, and the template counts each post's comments and
+likes, so a from-scratch render costs 101 queries.
+
+The outer `{% cache 30 lab15_page %}` wraps the list; each post sits in an
+inner `{% cache 3600 lab15_post post.pk post.last_modified %}`. The inner
+key includes `last_modified`, so editing a post changes the key. The stale
+fragment is never deleted — the next render just looks up a key that
+doesn't exist yet, re-renders that one post, and the old entry expires on
+its own.
+
+| state | queries | render |
+|-------|---------|--------|
+| no caching | 101 | 130 ms |
+| all fragments cold | 101 | 276 ms |
+| warm (outer hit) | 0 | 10 ms |
+| outer expired, one post edited | 3 | 21 ms |
+
+The bottom row is the point: a refresh costs what changed (one list query
+plus two counts), not what the page contains. With the flat lab-14 cache
+the same row would read 101 queries.
+
+The same idea survives outside Django templates: cache per-object
+serialized JSON keyed on `(pk, last_modified)` and assemble list responses
+from it, or let ETags carry the version key over HTTP. The template tag is
+Django-specific; invalidation-by-key-change is not.
+
+A `?flush` param deletes all fragments via `make_template_fragment_key` —
+demo convenience, not a pattern (in production you'd let keys rotate and
+TTLs collect the garbage). `labs/test_lab15.py` pins content parity between
+the cached and uncached pages, the zero-query warm render, and the
+exact 3-query bill for an outer refresh with one edited post.
