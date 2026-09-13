@@ -16,6 +16,7 @@ from . import (
     lab13,
     lab14,
     lab15,
+    lab16,
     views,
 )
 
@@ -65,4 +66,6 @@ urlpatterns = [
     path("14/good/", lab14.dashboard_good),
     path("15/bad/", lab15.page_bad),
     path("15/good/", lab15.page_good),
+    path("16/bad/<int:category_id>/", lab16.stats_bad),
+    path("16/good/<int:category_id>/", lab16.stats_good),
 ]
