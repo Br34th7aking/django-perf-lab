@@ -96,7 +96,7 @@ Compose stack up (web/db/redis) · settings package · models + seed · DRF + si
 
 - [x] **Lab 14 · Response caching** — cache the rendered API response (per-view / low-TTL) vs recompute. **Prove:** silk + locust before/after; echoes the serve-from-as-high-up-as-possible principle. *(Result: 500k-comment dashboard, ~180 ms/request; `cache_page(30)` → 13 ms warm, zero queries. Locust @10 users: 870 ms median recompute vs 21 ms cached; @50 users cached: 49.3 req/s, 15 ms median, 2 recomputes per 1,471 requests. Staleness cycle demonstrated: TTL set at miss, hits don't extend. Cachalot + replica router disabled in local settings — both masked/broke the lab.)*
 - [x] **Lab 15 · Russian doll** — one template-rendered page (the exception to API-first): nested `{% cache %}`, short-TTL outer ⊃ long-TTL inner keyed on `post.last_modified`. Edit one post → only that fragment re-renders. Add magic `?flush` param. **Prove:** render times: cold / warm / one-fragment-stale. *(Result: uncached 101 queries/130 ms; cold 276 ms; warm 0 queries/10 ms; outer-expired + one edit 3 queries/21 ms — refresh cost proportional to what changed. Exact 3-query bill pinned in tests.)*
-- [ ] **Lab 16 · Thundering herd** — many keys with identical TTL expiring together under locust → load spike; fix with ±20% jitter. **Prove:** the spike graph flattens.
+- [x] **Lab 16 · Thundering herd** — many keys with identical TTL expiring together under locust → load spike; fix with ±20% jitter. **Prove:** the spike graph flattens. *(Result: per-second recompute histogram over 150 s — fixed TTL: 20 recomputes in 5–9 s bursts every cycle, 25 s silences between; jittered: decorrelates each cycle to a 1–2/s trickle. Client p99 unmoved at toy scale (52 vs 56 ms) — noted honestly; damage scales with keys × recompute cost. Jitter bounds pinned in tests.)*
 
 ## Arc D — Async (adds `worker` service to compose)
 
@@ -116,7 +116,7 @@ Compose stack up (web/db/redis) · settings package · models + seed · DRF + si
 - [x] **M0** — Lab 0 done: stack up, seeded, silk live, CI green
 - [x] **M1** — Arc A done (labs 1–7): README "Query reduction" section, every lab with numbers
 - [x] **M2** — Arc B done (labs 8–13)
-- [ ] **M3** — Arc C done (labs 14–16)
+- [x] **M3** — Arc C done (labs 14–16)
 - [ ] **M4** — Arc D done (labs 17–20): worker + beat in compose
 - [ ] **M5** — Arc E + polish: README opens with a summary table of all findings. Decision point (user's call): make repo public / pin on GitHub.
 - [ ] **M6** — Meaty project: scope it fresh when M5 lands (see below). Gated on explicit go.
@@ -130,8 +130,8 @@ A real DRF + React app where the techniques appear in context instead of isolati
 ## STATE  *(update after every sitting)*
 
 - **Last updated:** 2026-09-13
-- **Where we are:** Lab 15 complete on branch `lab-15`, PR pending. Russian-doll fragment caching on the repo's one template page (50 posts, per-post comment/like counts = 101-query render). Nested `{% cache %}`: outer 30 s, inner 3600 s keyed on `pk + last_modified` — invalidation by key change, nothing deleted. Warm 0 queries/10 ms; outer-expired + one edit 3 queries/21 ms. Discussed the pattern's life outside templates (per-object JSON cache entries, ETags, React memoization) — noted in README.
-- **Next action:** After merge: Lab 16 thundering herd (many keys with identical TTL expiring together under locust → load spike; fix with ±20% TTL jitter; prove the spike flattens). Completes Arc C → M3.
+- **Where we are:** Lab 16 complete on branch `lab-16`, PR pending. **Arc C complete when it merges — M3 ticked in this branch.** Synchronized-expiry herd reproduced via per-second recompute histogram (Redis hash instrumentation); ±20% TTL jitter decorrelates it. Close-out was delegated (user at lunch): Claude wrote locustfile + test_lab16.py without prior review — **user should review labs/test_lab16.py and locustfiles/lab16.py post-merge-decision**, plus the README entry.
+- **Next action:** After merge: Arc D — async. Lab 17 Celery offload (adds worker service to compose; sync slow view vs .delay(); prove p95 under locust). Compose change: new `worker` service.
 - **Session log:**
   - 2026-09-04 — plan created.
   - 2026-09-05 — scaffold: compose stack (healthchecks, .dockerignore), django project, settings package, postgres wired. Docker Desktop port-forward glitch fixed by recreate.
@@ -150,4 +150,5 @@ A real DRF + React app where the techniques appear in context instead of isolati
   - 2026-09-12 — Lab 12 built + measured. Locust client numbers proved useless under single-worker saturation (good "slower" than bad — noise); pivoted to silk medians + direct store-level thread bench. Discussed why counters flush to postgres instead of living in Redis. User challenged README voice ("does this look human-written?") — plain register adopted, memory updated. **Lab 12 done**, PR merged.
   - 2026-09-12 — Lab 13 built + measured (same sitting). Naive-FTS-slower-than-icontains surprise; miss-queries-scan-twice mechanism identified; migration cost reconstructed piecewise after another misread `time` output. **Lab 13 done → Arc B complete → M2.**
   - 2026-09-12 — Lab 14 built + measured (same sitting). Two earlier-lab leftovers ambushed the measurements: cachalot cached the "uncached" endpoint (27 ms warm), replica router got the aggregation cancelled by WAL replay under locust — both disabled in local.py. Staleness demo initially botched by reusing a dying cache entry (TTL set at miss only, hits don't extend); redone with forced miss. **Lab 14 done**, PR merged.
-  - 2026-09-13 — Lab 15 built + measured. First template-rendered page in the repo; silent-empty-variable gotcha (`author_name` rendered as blank, no error). Query counting through silk needed care twice: silk's EXPLAIN/bookkeeping inflated 101 app queries to 326 captured, and silk's logged SQL text produced a false `core_` match. Discussed russian-doll's applicability to React/JSON stacks. **Lab 15 done**, PR pending.
+  - 2026-09-13 — Lab 15 built + measured. First template-rendered page in the repo; silent-empty-variable gotcha (`author_name` rendered as blank, no error). Query counting through silk needed care twice: silk's EXPLAIN/bookkeeping inflated 101 app queries to 326 captured, and silk's logged SQL text produced a false `core_` match. Discussed russian-doll's applicability to React/JSON stacks. **Lab 15 done**, PR merged.
+  - 2026-09-13 — Lab 16 built + measured (same sitting). Herd made visible by logging each recompute's epoch second to a Redis hash → per-second histogram: fixed TTL bursts every 30 s with 25 s silences; jitter decorrelates cycle by cycle. Client percentiles unmoved at toy scale — histogram is the proof, scale arithmetic in README. Close-out delegated: Claude wrote locustfile + tests unreviewed. **Lab 16 done → Arc C complete → M3.** PR pending.

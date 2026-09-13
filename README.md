@@ -31,6 +31,7 @@ Every lab keeps both endpoints live: `/labs/NN/bad/` and `/labs/NN/good/`.
 | [13](#lab-13--full-text-search) | `icontains` substring scan | 972–2,466 ms | 12–155 ms | stored `tsvector` + GIN index |
 | [14](#lab-14--response-caching) | dashboard recomputed per request | 870 ms median @ 10 users | 15 ms median @ 50 users | `cache_page(30)` in Redis |
 | [15](#lab-15--russian-doll-caching) | one edit re-renders the whole page | 101 queries / 130 ms | 3 queries / 21 ms | nested `{% cache %}` keyed on `last_modified` |
+| [16](#lab-16--thundering-herd) | synchronized cache expiry | 20 recomputes in a ~5 s burst every TTL | steady 1–2/s trickle | ±20% TTL jitter |
 
 ### Lab 01 — N+1 queries
 
@@ -524,3 +525,45 @@ demo convenience, not a pattern (in production you'd let keys rotate and
 TTLs collect the garbage). `labs/test_lab15.py` pins content parity between
 the cached and uncached pages, the zero-query warm render, and the
 exact 3-query bill for an outer refresh with one edited post.
+
+### Lab 16 — Thundering herd
+
+Cache entries born together die together. Twenty per-category dashboards,
+each cached for exactly 30 s: steady traffic fills all twenty keys within
+a couple of seconds, so 30 s later they all expire inside the same window
+and the database absorbs twenty recomputes at once. The burst re-caches
+everything in sync, and the herd comes back every TTL.
+
+Each recompute logs its epoch second to a Redis hash. 150 s under locust
+(20 users, random category), recomputes per second:
+
+    fixed TTL 30       jitter 30 × uniform(0.8, 1.2)
+    t=  0s  ##########  t=  0s  #############
+    t= 30s  ######      t= 27s  ####
+    t= 31s  #######     t= 29s  ###
+    t= 32s  ####        t= 31s  ##
+    ...25 s silence...  t= 33s  ###
+    t= 61s  ######      ...activity most seconds...
+    t= 62s  #####       t= 57s  ##
+    t= 63s  #####       t= 61s  ##
+    ...25 s silence...  t= 66s  ##
+
+With the fixed TTL, every recompute lands in a 5–9 s burst once per cycle,
+separated by 25 s of silence — the load pattern is a periodic stampede.
+The jittered variant starts from the same synchronized cold fill but
+decorrelates a little more each cycle; by the third the recomputes are a
+1–2/s trickle with no silent gaps left. Same number of recomputes overall,
+opposite arrival pattern.
+
+One line changed: `cache.set(key, data, TTL)` became
+`cache.set(key, data, TTL * random.uniform(0.8, 1.2))`.
+
+At this scale the client percentiles barely moved (p99 52 ms vs 56 ms) —
+twenty 50 ms recomputes don't hurt one worker. The arithmetic turns hostile
+with real numbers: 200 keys at 400 ms each is 80 s of database work
+arriving in one burst, every TTL, forever. Herd protection is cheap
+insurance priced in milliseconds of extra staleness.
+
+`labs/test_lab16.py` pins the jitter bounds (every timeout within
+0.8–1.2 × TTL, and actually varying) and that warm hits skip the recompute
+path entirely.
