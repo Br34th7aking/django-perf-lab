@@ -15,6 +15,7 @@ from . import (
     lab12,
     lab13,
     lab14,
+    lab15,
     views,
 )
 
@@ -62,4 +63,6 @@ urlpatterns = [
     path("13/good/", lab13.SearchFTSIndexed.as_view()),
     path("14/bad/", lab14.dashboard_bad),
     path("14/good/", lab14.dashboard_good),
+    path("15/bad/", lab15.page_bad),
+    path("15/good/", lab15.page_good),
 ]

@@ -1,0 +1,25 @@
+{% load cache %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lab 15 - Posts</title>
+</head>
+<body>
+   <h1>Latest posts</h1> 
+   {% cache 30 lab15_page %}
+   <ul>
+    {% for post in posts %}
+    {% cache 3600 lab15_post post.pk post.last_modified %}
+    <li>
+        <strong>{{post.title}}</strong> by {{post.author.name}}
+        - {{ post.comments.count }} comments, {{ post.likes.count }} likes
+        <p>{{ post.body | truncatewords:30 }}</p>
+    </li>
+    {% endcache %}
+    {% endfor %}
+   </ul>
+   {% endcache %}
+</body>
+</html>
