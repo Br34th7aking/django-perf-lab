@@ -6,3 +6,4 @@ django-silk
 django-cachalot
 redis
 celery[redis]
+django-waffle

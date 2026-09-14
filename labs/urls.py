@@ -20,6 +20,7 @@ from . import (
     lab17,
     lab18,
     lab19,
+    lab21,
     views,
 )
 
@@ -77,4 +78,6 @@ urlpatterns = [
     path("18/good/", lab18.comment_good),
     path("19/flood/", lab19.flood),
     path("19/urgent/", lab19.urgent),
+    path("21/search/", lab21.search),
+    path("21/flags/", lab21.flags),
 ]

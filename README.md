@@ -36,6 +36,7 @@ Every lab keeps both endpoints live: `/labs/NN/bad/` and `/labs/NN/good/`.
 | [18](#lab-18--the-on_commit-race) | task queued inside the transaction | 50/50 tasks failed `DoesNotExist` | 0/50 failed | `transaction.on_commit()` |
 | [19](#lab-19--priority-queues) | urgent task behind a bulk flood | 12.0 s wait | 2.8 ms wait | dedicated queue per priority |
 | [20](#lab-20--celery-beat) | write buffer flushed by hand | manual `flush_views` runs | fires every 15.0 s, verified | celery beat schedule |
+| [21](#lab-21--feature-flag-rollout) | risky search-engine swap shipped to 100% | all-or-nothing deploy | 12.3% of sessions, kill switch verified | waffle percent flag |
 
 ### Lab 01 — N+1 queries
 
@@ -715,3 +716,43 @@ jobs shouldn't pile up processes on whichever host owns the crontab.
 actually registered (the classic beat failure is a renamed task and a
 schedule still pointing at the old path) and that the task flushes and
 logs its run.
+
+### Lab 21 — Feature-flag rollout
+
+Lab 13 built a faster search engine with slightly different result
+semantics (stemmed words instead of substrings). Swapping engines for
+everyone in one deploy means discovering the semantic differences from
+support tickets. Instead the swap goes behind a waffle flag: one endpoint,
+`flag_is_active()` picks the engine per request, and the flag starts at
+`percent=10`.
+
+Measured across 300 fresh sessions: 37 got the new engine (12.3%, on
+target for a random roll). A session that rolls keeps its result via a
+`dwf_fts-search` cookie (30 days), so users don't see search semantics
+flicker. The kill switch is `everyone=False` on the flag row — traffic
+went 100% old-engine within one request, no deploy. `everyone=True` is
+the graduation. A `/labs/21/flags/` endpoint exposes flag state for JS
+clients to branch on.
+
+Two traps surfaced building it:
+
+- Waffle caches flags in the Django cache. Flipping the flag with
+  `queryset.update()` bypasses `post_save`, so the cache-flush signal
+  never fires and the "kill switch" silently keeps serving the old
+  decision until TTL. Flip flags with `.save()` (or the admin, which
+  does).
+- Under DRF, `flag_is_active(request, ...)` records its decision on
+  DRF's request wrapper, but the cookie-setting middleware reads the
+  underlying `HttpRequest` — result: no rollout cookie, and every request
+  re-rolls. Pass `request._request`. The no-cookie behavior is also
+  exactly what tokened API clients (mobile apps, curl) experience:
+  the feature flickers per request. For those, target by user or group
+  instead of percent.
+
+Managed equivalents (LaunchDarkly, Unleash, Flagsmith) buy streaming flag
+updates, cross-platform SDKs, and targeting rules; the in-code shape —
+check flag, branch, kill switch — is the same.
+
+`labs/test_lab21.py` pins engine routing under the flag, the stem-vs-
+substring disagreement that justifies the gradual rollout, the flags
+endpoint, and — via a cookie assertion — the DRF request-wrapper fix.
