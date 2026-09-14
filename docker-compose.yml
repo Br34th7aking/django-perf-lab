@@ -81,6 +81,7 @@ services:
       - POSTGRES_PASSWORD=perflab
     volumes:
       - pgdata:/var/lib/postgresql/data
+      - ./docker/init-db:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U perflab -d perflab"]
       interval: 5s

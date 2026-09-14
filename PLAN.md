@@ -118,7 +118,7 @@ Compose stack up (web/db/redis) · settings package · models + seed · DRF + si
 - [x] **M2** — Arc B done (labs 8–13)
 - [x] **M3** — Arc C done (labs 14–16)
 - [x] **M4** — Arc D done (labs 17–20): worker + beat in compose
-- [ ] **M5** — Arc E + polish: README opens with a summary table of all findings. Decision point (user's call): make repo public / pin on GitHub.
+- [x] **M5** — Arc E + polish: README opens with a summary table of all findings. Decision point (user's call): make repo public / pin on GitHub. *(Repo was already public; housekeeping 2026-09-14: LICENSE (MIT), repo description + 10 topics, Run-section expansion (services list, pytest/locust/silk commands), fresh-clone fix — db init script recreating lab-11's manual replicator role + pg_hba rule on empty volumes. Pinning the repo on the profile remains the user's manual step.)*
 - [ ] **M6** — Meaty project: scope it fresh when M5 lands (see below). Gated on explicit go.
 
 ## Meaty project (scope at M6, not before)
@@ -130,8 +130,8 @@ A real DRF + React app where the techniques appear in context instead of isolati
 ## STATE  *(update after every sitting)*
 
 - **Last updated:** 2026-09-14
-- **Where we are:** Lab 21 complete on branch `lab-21`, PR pending — **all 21 labs done.** Delegated lab — **user should review labs/lab21.py, labs/test_lab21.py, and the waffle settings additions.** M5 is one decision short: the README findings table is complete (21 rows), so what remains is the user's call on making the repo public / pinning it. M6 (meaty project) scoping is gated on explicit go.
-- **Next action:** User merges PR; decides M5 (public/pin); then M6 scoping discussion if wanted.
+- **Where we are:** All 21 labs merged. Housekeeping on branch `chore-housekeeping`, PR pending: LICENSE, repo description/topics (already applied on GitHub), Run-section expansion, fresh-clone replication bootstrap (docker/init-db/init-replication.sh — logic verified against the live db's pg_hba + role, NOT executed end-to-end since that requires wiping pgdata). **M5 done when it merges** (pinning the repo is the user's manual step). Offered but not done: prose pass over lab 1–5 README entries (pre-date the plain-register rule).
+- **Next action:** User merges housekeeping PR, pins repo if wanted; then M6 scoping (meaty project) on explicit go — new repo vs this one is an open question.
 - **Session log:**
   - 2026-09-04 — plan created.
   - 2026-09-05 — scaffold: compose stack (healthchecks, .dockerignore), django project, settings package, postgres wired. Docker Desktop port-forward glitch fixed by recreate.
@@ -156,4 +156,5 @@ A real DRF + React app where the techniques appear in context instead of isolati
   - 2026-09-13 — Lab 18 built + measured (same sitting). Race reproduced on the very first smoke request; 50 ms in-transaction tail made it 50/50 deterministic. Emphasized failure shape: 200 + row present + side effect gone. 102 demo comments deleted post-demo (signals kept counters honest). **Lab 18 done**, PR merged.
   - 2026-09-14 — Lab 19 built + measured, fully delegated to Claude. Second worker service (`worker_bulk`, -Q bulk, concurrency 2); wait-time-per-task instrumentation; 12.0 s vs 2.8 ms urgent wait; bulk-gets-slower trade-off stated in README. **Lab 19 done**, PR merged.
   - 2026-09-14 — Lab 20 built + verified (same sitting, delegated). Beat service wraps flush_views as a 15 s scheduled task; two firings 15.0 s apart, buffer→postgres hands-off. Single-beat-instance rule + cron-vs-beat trade in README. **Lab 20 done → Arc D complete → M4.** PR merged.
-  - 2026-09-14 — Lab 21 built + measured (same sitting, delegated). Lab-13 engine swap behind a waffle percent flag; 12.3% of 300 sessions on target. Two real traps mid-build: stale flag cache from update()-without-signals (kill switch silently dead), and DRF's request wrapper eating the rollout cookie (no stickiness) — both fixed, both pinned in tests, both in README. Discussed LaunchDarkly as managed equivalent. **Lab 21 done — all 21 labs complete.** PR pending.
+  - 2026-09-14 — Lab 21 built + measured (same sitting, delegated). Lab-13 engine swap behind a waffle percent flag; 12.3% of 300 sessions on target. Two real traps mid-build: stale flag cache from update()-without-signals (kill switch silently dead), and DRF's request wrapper eating the rollout cookie (no stickiness) — both fixed, both pinned in tests, both in README. Discussed LaunchDarkly as managed equivalent. **Lab 21 done — all 21 labs complete.** PR merged.
+  - 2026-09-14 — Housekeeping (same sitting): repo turned out to be public already. LICENSE, description, topics, Run-section expansion, fresh-clone replica bootstrap via docker-entrypoint-initdb.d. **M5 done** pending merge.
