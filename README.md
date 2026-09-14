@@ -10,6 +10,19 @@ gunicorn, all in docker compose. Profiling: django-silk. Load testing: locust.
     docker compose exec web python manage.py migrate
     docker compose exec web python manage.py seed   # 100k posts, 500k comments
 
+Seven services: `web` (gunicorn), `db` (postgres 17), `db_replica`
+(streaming replica with 2 s apply delay, lab 11), `redis`, `worker` +
+`worker_bulk` (celery, labs 17–19), `beat` (scheduler, lab 20). First
+`up` builds the dev image and bootstraps the replication role on a fresh
+database.
+
+    docker compose exec web pytest labs/    # each lab's claims, pinned as tests
+    locust -f locustfiles/lab05.py --host http://localhost:8000 --headless -u 10 -r 10 -t 45s --tags bad
+
+Locust runs from the host (`pip install locust`).
+
+Silk profiling UI: http://localhost:8000/silk/
+
 Every lab keeps both endpoints live: `/labs/NN/bad/` and `/labs/NN/good/`.
 
 ## Findings
